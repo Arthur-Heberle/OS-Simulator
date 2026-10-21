@@ -6,7 +6,7 @@
 // (before, during and after the simulation) in a single structure.
 class Task {
     private:
-        int id;             // Unique task identifier
+        std::string id;     // Unique task identifier (text: Project B uses ids like "BS01")
         std::string color;  // RGB hexadecimal color (e.g. "F0E0D0")
         int arrival;        // Tick at which the task is created
         int duration;       // Total execution time needed
@@ -18,7 +18,7 @@ class Task {
         Task();
 
         // Creates a task from the fields of a line of the input file.
-        Task(int id, std::string color, int arrival, int duration, int period, int deadline);
+        Task(std::string id, std::string color, int arrival, int duration, int period, int deadline);
 
         ~Task();
 };
