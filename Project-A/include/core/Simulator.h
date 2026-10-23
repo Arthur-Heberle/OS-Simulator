@@ -1,24 +1,31 @@
 #pragma once
-
-#include "core/Parser.h"
-#include "core/CPU.h"
+#include <vector>
+#include "core/Parser.h"        // Config
+#include "core/Scheduler.h"
 #include "core/SystemSnapshot.h"
-#include "core/Task.h"
 
-// Runs the simulation: owns the global clock and drives the tasks,
-// processors and scheduler tick by tick.
 class Simulator {
-    private:
-        int cpuCount;  // Number of simulated processors
+public:
+    explicit Simulator(const Config& config);
 
-    public:
-        // Creates a simulator with neutral values.
-        Simulator();
+    bool step(bool forward);    // false se não for possível (início ou fim)
+    bool isFinished() const;
 
-        // Creates a simulator with the given number of processors.
-        Simulator(int cpuCount);
+    const SystemSnapshot& current() const { return history_[currentIndex_]; }
+    const std::vector<SystemSnapshot>& history() const { return history_; }
+    int currentIndex() const { return currentIndex_; }
 
-        ~Simulator();
+private:
+    SystemSnapshot computeNext(const SystemSnapshot& now) const;
 
-        ParseResult parseConfig(const std::string& text);
+    void releaseActivations(SystemSnapshot& s) const;
+    void checkDeadlines   (SystemSnapshot& s) const;
+    void dispatch         (SystemSnapshot& s, const std::vector<int>& order) const;
+    void runOneTick       (SystemSnapshot& s) const;
+    void finishActivations(SystemSnapshot& s) const;
+
+    int quantum;
+    SchedulerFn scheduler;                  // RM ou EDF, escolhido no construtor
+    std::vector<SystemSnapshot> history_;   // history_[k] = estado no instante k
+    int currentIndex_ = 0;
 };

@@ -1,19 +1,15 @@
 #pragma once
-
+#include <map>
 #include <string>
+#include <vector>
+#include "core/SystemSnapshot.h"
 
-// Chooses the next task to run. A single class holds every algorithm:
-// each one (RM, EDF) will be its own member function.
-class Scheduler {
-    private:
-        std::string algorithm;  // Selected algorithm name ("RM" or "EDF")
+// Tipo "ponteiro para função de escalonamento": recebe o estado e devolve
+// os índices das tarefas candidatas, da maior para a menor prioridade.
+using SchedulerFn = std::vector<int> (*)(const SystemSnapshot&);
 
-    public:
-        // Creates a scheduler with no algorithm selected.
-        Scheduler();
+std::vector<int> scheduleRM (const SystemSnapshot& s);
+std::vector<int> scheduleEDF(const SystemSnapshot& s);
 
-        // Creates a scheduler that uses the given algorithm.
-        Scheduler(std::string algorithm);
-
-        ~Scheduler();
-};
+// Nome no arquivo de configuração (minúsculo) -> função. [A4.2]
+const std::map<std::string, SchedulerFn>& schedulerRegistry();
