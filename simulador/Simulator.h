@@ -1,9 +1,9 @@
 #pragma once
 
-#include "core/Parser.h"
-#include "core/CPU.h"
-#include "core/SystemSnapshot.h"
-#include "core/Task.h"
+#include "Parser.h"
+#include "CPU.h"
+#include "SystemSnapshot.h"
+#include "Task.h"
 
 // Runs the simulation: owns the global clock and drives the tasks,
 // processors and scheduler tick by tick.

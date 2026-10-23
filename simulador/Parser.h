@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "core/Task.h"
+#include "Task.h"
 
 struct Config {
     std::string algorithm = "rm";   // valores padrão [A3.2]

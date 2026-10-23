@@ -2,8 +2,8 @@
 
 #include <vector>
 #include <random>
-#include "core/CPU.h"
-#include "core/Task.h"
+#include "CPU.h"
+#include "Task.h"
 
 // Kinds of events the Gantt chart must draw at the exact tick they happen.
 // Names follow the assignment text: arrival and termination [A2.2],
