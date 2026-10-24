@@ -32,6 +32,7 @@ enum class MsgCode {
     TaskMissingField,
     TaskInvalidValue,
     TaskDuplicateId,
+    AperiodicIgnored,
 
     // Warnings: a default value is used or the item is ignored
     SystemMissingValue,
@@ -39,7 +40,6 @@ enum class MsgCode {
     UnknownAlgorithm,
     InvalidColor,
     DuplicateColor,
-    AperiodicIgnored,
     ExtraFields,
 };
 
@@ -56,12 +56,12 @@ inline const std::map<MsgCode, MessageInfo> MESSAGES = {
     {MsgCode::TaskMissingField,
      {Severity::Error, "Line {}: task cannot be added. Reason: field '{}' is missing."}},
     {MsgCode::TaskInvalidValue,
-     {Severity::Error, "Line {}: task cannot be added. Reason: field '{}' has invalid value ({})."}},
+     {Severity::Error, "Line {}: task cannot be added. Reason: field '{}' has invalid value '{}' ({})."}},
     {MsgCode::TaskDuplicateId,
      {Severity::Error, "Line {}: task cannot be added. Reason: id '{}' is already used on line {}."}},
+   
     {MsgCode::AperiodicIgnored,
-     {Severity::Error, "Line {}: task cannot be added. Reason: task is aperiodic (period {})"}},
-
+     {Severity::Warning, "Line {}: task '{}' is aperiodic (period 0) and will be ignored in Project A."}},
     {MsgCode::SystemMissingValue,
      {Severity::Warning, "Line {}: '{}' not provided. Using default '{}'."}},
     {MsgCode::SystemInvalidValue,
@@ -70,8 +70,8 @@ inline const std::map<MsgCode, MessageInfo> MESSAGES = {
      {Severity::Warning, "Line {}: unknown scheduling algorithm '{}'. Using default '{}'."}},
     {MsgCode::InvalidColor,
      {Severity::Warning, "Line {}: invalid color '{}' for task '{}'. Using default '{}'."}},
-    {MsgCode::DuplicateColor,
-     {Severity::Warning, "Line {}: color '{}' of task '{}' is already used by task '{}'."}},
+     {MsgCode::DuplicateColor,
+     {Severity::Warning, "Line {}: color '{}' of task '{}' is already used on line {}. Using '{}' instead."}},
     {MsgCode::ExtraFields,
      {Severity::Warning, "Line {}: extra fields were ignored."}},
 };

@@ -163,55 +163,120 @@ void parseSystemLine(const std::vector<std::string>& fields, int lineNumber, Par
 // ---------------------------------------------------------------------------
 // Other lines: id;color;arrival;duration;period;deadline;event_list
 // ---------------------------------------------------------------------------
+// Checks if the text has exactly 6 hexadecimal digits (e.g. "F0E0D0").
+bool isValidHexColor(const std::string& color) {
+    if (color.size() != 6) {
+        return false;
+    }
+    for (char c : color) {
+        if (!std::isxdigit(static_cast<unsigned char>(c))) {  // 0-9, a-f, A-F
+            return false;
+        }
+    }
+    return true;
+}
 
-// Reads an integer system field. If it is missing or invalid, the default
-// value already stored in "target" is kept and a warning is added.
+// Returns a color that no task is using yet, so every task keeps a
+// different color in the Gantt chart [A2.1].
+std::string nextFreeColor(const std::map<std::string, int>& usedColors) {
+    static const std::vector<std::string> PALETTE = {
+        "E6194B", "3CB44B", "FFE119", "4363D8", "F58231", "911EB4",
+        "46F0F0", "F032E6", "BCF60C", "FABEBE", "008080", "E6BEFF",
+    };
+    for (const std::string& color : PALETTE) {
+        if (usedColors.count(color) == 0) {
+            return color;
+        }
+    }
+    // Palette exhausted: walk through other colors until a free one is found.
+    for (int value = 0x101010; ; value += 0x0F0F37) {
+        char buffer[7];
+        std::snprintf(buffer, sizeof(buffer), "%06X", value & 0xFFFFFF);
+        if (usedColors.count(buffer) == 0) {
+            return buffer;
+        }
+    }
+}
+
+// Reads an integer task field. Returns false (and adds an error) if it is
+// missing, not a number, or smaller than minValue.
 bool readTaskInt(const std::vector<std::string>& fields, std::size_t index,
-                   const std::string& name, int minValue, int maxValue,
-                   int& target, int lineNumber, ParseResult& result) {
+                 const std::string& name, int minValue,
+                 int& target, int lineNumber, ParseResult& result) {
     std::string line = std::to_string(lineNumber);
     std::string raw = fieldAt(fields, index);
     int value = 0;
 
-    if (name.compare("period")){
-        if (target <= 0){
-            addMessage(result, MsgCode::AperiodicIgnored, {line, std::to_string(target)});
-        }
-    }
-
     if (raw.empty()) {
-        addMessage(result, MsgCode::TaskMissingField, {line, name, std::to_string(target)});
-    } else if (!parseInt(raw, value) || value < minValue || value > maxValue) {
-        addMessage(result, MsgCode::TaskInvalidValue, {line, raw, name});
-    } else {
-        target = value;
+        addMessage(result, MsgCode::TaskMissingField, {line, name});
+        return false;
     }
+    if (!parseInt(raw, value) || value < minValue) {
+        std::string reason = "must be an integer >= " + std::to_string(minValue);
+        addMessage(result, MsgCode::TaskInvalidValue, {line, name, raw, reason});
+        return false;
+    }
+    target = value;
+    return true;
 }
 
-void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, ParseResult& result) {
-    // TODO: read each field by position with fieldAt(), validate it and,
-    // only if this line has no errors, add the task to result.config.tasks.'
-    
+// usedIds and usedColors map each id/color to the line where it first appeared.
+void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, ParseResult& result,
+                   std::map<std::string, int>& usedIds, std::map<std::string, int>& usedColors) {
     std::string line = std::to_string(lineNumber);
-    Config& config = result.config;
-    Task task;
-    config.tasks.emplace_back(task);
+    Task task;       // built locally, added only at the end
+    bool ok = true;  // becomes false on any error, but we keep checking the
+                     // other fields so the user sees all errors at once
 
-    int invalidValue = -1;
-
-    
-    
-
-
-    if (!invalidValue){
-        config.tasks.pop_back();
+    // Field 0: id (required and unique)
+    task.id = fieldAt(fields, 0);
+    if (task.id.empty()) {
+        addMessage(result, MsgCode::TaskMissingField, {line, "id"});
+        ok = false;
+    } else if (usedIds.count(task.id) > 0) {
+        addMessage(result, MsgCode::TaskDuplicateId,
+                   {line, task.id, std::to_string(usedIds.at(task.id))});
+        ok = false;
+    } else {
+        usedIds[task.id] = lineNumber;
     }
 
-    if (fields.size() > 7){
-        addMessage(result, MsgCode::ExtraFields,{line});
+    // Fields 2 to 5: integers
+    ok = readTaskInt(fields, 2, "arrival",  0, task.arrival,  lineNumber, result) && ok;
+    ok = readTaskInt(fields, 3, "duration", 1, task.duration, lineNumber, result) && ok;
+    ok = readTaskInt(fields, 4, "period",   0, task.period,   lineNumber, result) && ok;  // < 0 is an error [A3.3]
+    ok = readTaskInt(fields, 5, "deadline", 1, task.deadline, lineNumber, result) && ok;
+
+    // Field 6: event list (optional, kept as raw text for Project B)
+    // task.rawEvents = fieldAt(fields, 6);
+
+    if (!ok) {
+        return;  // at least one error: task is not added
     }
+    if (task.period == 0) {
+        addMessage(result, MsgCode::AperiodicIgnored, {line, task.id});  // [A4.4]
+        return;
+    }
+
+    // Field 1: color. Checked last, so only tasks that are really added
+    // reserve a color. Uppercase so "ff0000" and "FF0000" are the same [A3.3.2].
+    std::string rawColor = fieldAt(fields, 1);
+    std::string color = toUpper(rawColor);
+
+    if (!isValidHexColor(color)) {
+        color = nextFreeColor(usedColors);
+        addMessage(result, MsgCode::InvalidColor, {line, rawColor, task.id, color});
+    } else if (usedColors.count(color) > 0) {
+        std::string firstLine = std::to_string(usedColors.at(color));
+        std::string newColor = nextFreeColor(usedColors);
+        addMessage(result, MsgCode::DuplicateColor, {line, color, task.id, firstLine, newColor});
+        color = newColor;
+    }
+
+    task.color = color;
+    usedColors[color] = lineNumber;
+    result.config.tasks.push_back(task);
 }
-
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -224,6 +289,8 @@ ParseResult parser::parseConfig(const std::string& text) {
     std::string line;
     int lineNumber = 0;
     bool systemLineRead = false;
+    std::map<std::string, int> usedIds;
+    std::map<std::string, int> usedColors;
 
     while (std::getline(stream, line)) {
         ++lineNumber;  // counts every line, so messages match the file
@@ -240,7 +307,7 @@ ParseResult parser::parseConfig(const std::string& text) {
             parseSystemLine(fields, lineNumber, result);
             systemLineRead = true;
         } else {
-            parseTaskLine(fields, lineNumber, result);
+            parseTaskLine(fields, lineNumber, result, usedIds, usedColors);
         }
     }
 
