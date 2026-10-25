@@ -17,10 +17,10 @@ struct Task {
     std::string id;     // Unique task identifier (text: Project B uses ids like "BS01")
     std::string color = "FFFFFF";  // RGB hexadecimal color (e.g. "F0E0D0")
     int arrival = 0;        // Tick at which the task is created
-    int duration;       // Total execution time needed
-    int period;         // Activation period (> 0 periodic, 0 aperiodic)
-    int deadline;       // Deadline, counted from each activation
-    int remaining;
+    int duration = 0;       // Total execution time needed
+    int period = 0;         // Activation period (> 0 periodic, 0 aperiodic)
+    int deadline = 0;       // Deadline, counted from each activation
+    int remaining = 0;      // Ticks still needed by the current activation
     int absoluteDeadline = 0;   // Deadline tick of the current activation (used by EDF)
     TaskState state = TaskState::New;
 };
