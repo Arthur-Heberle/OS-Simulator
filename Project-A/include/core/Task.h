@@ -21,6 +21,7 @@ struct Task {
     int period;         // Activation period (> 0 periodic, 0 aperiodic)
     int deadline;       // Deadline, counted from each activation
     int remaining;
+    int absoluteDeadline = 0;   // Deadline tick of the current activation (used by EDF)
     TaskState state = TaskState::New;
 };
 
