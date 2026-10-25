@@ -22,6 +22,8 @@ struct Task {
     int deadline = 0;       // Deadline, counted from each activation
     int remaining = 0;      // Ticks still needed by the current activation
     int absoluteDeadline = 0;   // Deadline tick of the current activation (used by EDF)
+    int nextRelease = 0;        // Tick of the next activation (set to arrival when the simulation starts)
+    int activationsDone = 0;    // Finished activations; 10 -> Terminated [A4.4]
     TaskState state = TaskState::New;
 };
 
