@@ -83,7 +83,6 @@ add_library(simcore STATIC
     Parser.cpp
     Scheduler.cpp
     Simulator.cpp
-    Task.cpp
     # Cabeçalhos listados só para aparecerem nas IDEs.
     CPU.h
     Parser.h
