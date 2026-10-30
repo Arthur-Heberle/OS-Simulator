@@ -3,8 +3,8 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include "core/CPU.h"
-#include "core/Task.h"
+#include "CPU.h"
+#include "Task.h"
 
 // Kinds of events the Gantt chart must draw at the exact tick they happen.
 // Cada tipo tem um ícone distinto e entra na legenda [RG3] (design.md §10).

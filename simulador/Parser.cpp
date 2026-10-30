@@ -1,5 +1,5 @@
-#include "core/Parser.h"
-#include "core/Scheduler.h"   // registro de algoritmos [A4.2]
+#include "Parser.h"
+#include "Scheduler.h"   // registro de algoritmos [A4.2]
 
 #include <cctype>
 #include <charconv>

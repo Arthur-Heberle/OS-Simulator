@@ -1,0 +1,13 @@
+# .gitattributes — padroniza fins de linha no repositório (design.md §2, problema 10 do §3.1).
+# Todo arquivo de texto é guardado com LF no Git e entregue com LF na cópia de trabalho,
+# independentemente do core.autocrlf de cada integrante: assim os diffs não mudam
+# só por causa de CRLF/LF e o que compila no Git é idêntico ao que vai ao Moodle.
+# (O parser tolera CRLF/LF de qualquer forma nos arquivos de configuração do usuário: D18.)
+* text=auto eol=lf
+
+# Binários: nunca converter.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.docx binary

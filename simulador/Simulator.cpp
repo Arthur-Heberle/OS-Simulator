@@ -1,4 +1,4 @@
-#include "core/Simulator.h"
+#include "Simulator.h"
 #include <algorithm>
 
 // ---------------------------------------------------------------------------

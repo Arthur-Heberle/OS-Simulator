@@ -1,0 +1,63 @@
+
+Bibliotecas gráficas, tais como SFML no C++ por exemplo, são consideradas bibliotecas externas? 
+
+Caso positivo, de acordo com o documento de instruções, não poderíamos usá-las para confeccionar o software, certo? 
+
+Como poderíamos proceder nesse caso? A interface gráfica é uma exceção à essa regra?
+
+R: Não há nada no enunciado do trabalho que diga que não se pode usar biblioteca externa. O que está escrito é "... é necessário que o software criado possa ser executado SEM a necessidade de INSTALAR nenhuma biblioteca extra", ou seja, o executável gerado precisa ser "standalone".
+ver https://superuser.com/questions/685038/difference-between-a-stand-alone-executable-file-and-an-installed-executable
+
+Oi professor @Marco Wehrmeister, tenho uma pergunta parecida com a da Bruna. A linguagem usada tem que obrigatoriamente ser compilada, ou pode ser interpretada?
+
+R: Qualquer uma das opções. Mas... para executar o software, não se deve exigir instalar nada extra no SO para qual esse simulador foi desenvolvido.
+
+@Marco Wehrmeister Boa tarde professor, tenho uma dúvida a respeito do trabalho. Para qual fila uma tarefa periódica que completou o seu tempo de computação antes do seu período acabar deve ir? Acho que ela deve ir para a fila de suspensos, mas não tenho certeza
+
+R: Toda fila tem um motivo, uma semântica.
+Por que uma tarefa entra na fila de suspensão?
+Pode haver outras filas, com outras semântica? Qual? Como? Por que?
+
+Replica: Tem que ter algum lugar para eu colocar as tarefas periódicas que já completaram sua computação em um certo período. Não posso simplesmente colocá-las novamente na fila de prontos, pois se não elas podem ser escolhidas novamente antes de começar o seu próximo período
+
+R: Isso é um dos problemas a serem resolvidos. A equipe decide como fazer e depois, na defesa, justifica a decisão
+
+@Marco WehrmeisterProf., sobre o trabalho: o quantum é obrigatório no cabeçalho do arquivo , mas não encontrei nada sobre quantum no RM e EDF no capítulo do livro. Precisamos apenas ler esse campo sem efeito nenhum no simulador ou acionar o escalonador quando ele terminar? Se a prioridade e os critérios de desempate selecionarem novamente a mesma tarefa, ela pode continuar executando ou é pra trocar a tarefa?
+
+Não confundir "quantum" de uma tarefa com o "relógio" do sistema. Não sei se entendi bem a sua pergunta @mario . Onde está escrito que "o quantum é obrigatório no cabeçalho do arquivo"? Qual requisito?
+
+Replica: Não esta escrito, Prof. É o exemplo que voce deixou no requisito, aqui:
+3.3. A configuração/parametrização do sistema a ser simulado deve ser carregada a partir de um arquivo texto, formato texto simples (plain text), e deve seguir o
+seguinte formato:
+algoritmo_escalonamento; quantum;
+qtde_cpus
+id;cor;ingresso; duracao; periodo; prazo;lista eventos
+onde:
+algoritmo_escalonamento indica o algoritmo de escalonamento a ser
+usado na simulação;
+quantum indica o período máximo de tempo que uma tarefa pode executar;
+
+Ai a duvida é, se esse campo precisa ficar ali mesmo no cabeçalho e ignoramos no código
+
+R: Ah sim, tem que ler do arquivo de configuração. Se vai precisar usar ou não, ai é específico de cada escalonador
+
+Replica: Fechou, entao! Como nesses que vamos fazer não usam quantum entao vou só "passar reto" por ele. muito obrigado
+
+Professor, eu fiquei em dúvida quanto a uma parte dos requisitos do trabalho. Nesse texto da imagem, eu não consegui entender se o ícone de chegada e saída deve aparecer apenas uma vez por tarefa, no momento em que ela é criada e no momento que ela conclui completamente, ou se várias vezes, cada vez que ela começa a executar e cada vez que termina
+
+"2.2. Quando uma tarefa nova chega no sistema isso deve ser claramente mostrado no gráfico de gantt. Da mesma forma, quando a tarefa termina a sua execução, isso deve ser claramente mostrado no gráfico de gantt. Para isso utilize icones, figuras, setas ou outro elemento gráfico que indique esses eventos. Esses eventos devem ser mostrados no momento exato em que eles acontecem."
+
+R: O texto tem realmente um problema. A indicação da criação da tarefa, na verdade, deveria ser o momento que ela entra na fila de prontos. No caso das tarefas periódicas, quando passou o período e ela esta pronta para executar novamente. No caso das aperiodicas (defesa b), quando ela foi criada no sistema.
+O término, por sua vez, é a indicação que ela terminou uma ocorrência da execução (para tarefas periodicas) ou terminou e será excluída (para o caso das aperiodicas)
+
+Professor, também é descrito que o nosso sistema operacional precisa ter uma quantidade configuravel de processadores, de 1 até N, mas eu fiquei na dúvida de quantos processadores seriam suficientes para cumprir o requisito de N processadores, por exemplo, um máximo de 16 processadores seria adequado? Ou seria melhor algo mais parecido com 50?
+
+R: Não há um limite para o N. No entanto, vocês podem estabelecerem um limite máximo mas, se isso for perguntado, vocês vão precisar defender essa decisão de projeto. Respostas como "não sei", "achei melhor", "decidimos assim", etc. sem uma justifica técnica plausível impactarão negativamente na avaliação do trabalho.
+
+Professor uma dúvida, nosso projeto final ultrapassou a quantidade de anexos máximo no moodle (20 arquivos), nesse caso como poderia ser resolvido?
+
+R: como assim 20+ "arquivos essenciais"? por que? Qual linguagem vocês usaram? Não precisa mandar o executavel. Se não há outra forma de refatorar o código para caber dentro do limite de 20 arquivos, vocês podem mandar todos os arquivos do projeto dentro de um arquivo zip. No dia da defesa vocês defendem/explicam as decisões de projeto que levaram a criação dessa quantidade de arquivos. Mas quem puder, evite essa abordagem.
+
+Professor, para que no nosso trabalho (programado em C++) fosse possível conter todos os códigos-fonte dentro do limite de arquivos, nós precisamos recorrer a implementar algumas classes menores no arquivo .hpp unicamente. Nesse caso, seria melhor desfazermos esse procedimento para que o código ficasse mais organizado e então enviamos o arquivo compactado .zip ou deixamos do jeito que está? (Algumas classes implementadas totalmente no arquivo .hpp)
+
+R: vocês decidem. O importante para @everyone é vocês demonstrarem que sabem do que estão falando na hora da defesa; que tem conhecimento dos "como's" e "por que's" da soluçào de vocês.

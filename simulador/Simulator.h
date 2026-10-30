@@ -1,9 +1,9 @@
 #pragma once
 #include <cstddef>
 #include <vector>
-#include "core/Parser.h"        // Config
-#include "core/Scheduler.h"
-#include "core/SystemSnapshot.h"
+#include "Parser.h"        // Config
+#include "Scheduler.h"
+#include "SystemSnapshot.h"
 
 // ---------------------------------------------------------------------------
 // Regras da simulação: funções livres sobre o snapshot (D21, design.md §6).

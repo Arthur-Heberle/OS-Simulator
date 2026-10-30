@@ -1,1 +1,37 @@
-build/ 
+# .gitignore — o que NÃO entra no repositório.
+# Importante: NÃO ignorar *.md (os documentos de contexto em docs/ e o CLAUDE.md
+# precisam ser versionados; a versão anterior ignorava todos eles).
+
+# Pastas de compilação do CMake (cmake -S simulador -B build) e variações.
+build/
+build-*/
+simulador/build/
+simulador/build-*/
+
+# Pasta de distribuição standalone gerada por "cmake --install build --prefix dist".
+dist/
+simulador/dist/
+
+# Binários e objetos (nunca vão ao Moodle: só código e configuração).
+*.exe
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+
+# Imagens geradas pelo botão de teste do Qt (Fase 0) e exportações de teste.
+teste_qt.png
+teste_qt.svg
+
+# Preferências pessoais de cada integrante para o Claude Code (CLAUDE.md, "Como trabalhar").
+CLAUDE.local.md
+
+# Arquivos de IDE.
+CMakeLists.txt.user
+.vs/
+.vscode/
+.idea/
+
+# Referências locais que não podem ser redistribuídas (ex.: livro do Maziero).
+docs/ref/
