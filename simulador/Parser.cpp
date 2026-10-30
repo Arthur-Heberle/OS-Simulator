@@ -550,3 +550,23 @@ std::string parser::serializeConfig(const Config& config) {
     }
     return out;
 }
+
+bool parser::normalizeColor(const std::string& raw, std::string& out) {
+    std::string color = toUpper(trim(raw));
+    if (!color.empty() && color[0] == '#') {
+        color.erase(0, 1);
+    }
+    if (!isValidHexColor(color)) {
+        return false;
+    }
+    out = color;
+    return true;
+}
+
+bool parser::isTooDarkColor(const std::string& color) {
+    return isTooDark(color);
+}
+
+bool parser::isTooLightColor(const std::string& color) {
+    return isTooLight(color);
+}

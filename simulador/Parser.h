@@ -157,4 +157,11 @@ namespace parser {
     // Usado por "Salvar configuração" na interface, depois de edições (A3.1).
     // A semente do sorteio não faz parte do formato e não é escrita.
     std::string serializeConfig(const Config& config);
+
+    // Regras de cor do parser (D17), expostas para a edição manual (SetColor)
+    // usar exatamente as mesmas. normalizeColor aceita "#ff0000" ou "FF0000",
+    // devolve "FF0000" em 'out' e false se não for RRGGBB hexadecimal.
+    bool normalizeColor(const std::string& raw, std::string& out);
+    bool isTooDarkColor(const std::string& color);   // quase preta (preto = suspensa, A2.1)
+    bool isTooLightColor(const std::string& color);  // quase branca (pareceria "pronta", A2.1)
 }
