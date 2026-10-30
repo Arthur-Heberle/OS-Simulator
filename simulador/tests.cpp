@@ -6,8 +6,8 @@
 //   - Fase 1: ferramentas de teste do contrato (serializeSnapshot, verificador
 //     de invariantes de histórico, helpers de consulta), naturalIdLess e o
 //     histórico de demonstração de G1 (demoHistoryG1).
-//   - Próximas fases: parser P1–P14, cenários dourados G1–G6, fuzz
-//     (docs/testes.md).
+//   - Fase 2: parser P1–P14 e robustez (docs/testes.md §3).
+//   - Próximas fases: cenários dourados G1–G6, fuzz (docs/testes.md).
 //
 // Por quê assim:
 //   - Sem GoogleTest ou outra biblioteca: a macro CHECK abaixo basta e evita
@@ -24,6 +24,7 @@
 // =============================================================================
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -473,6 +474,281 @@ static void testDemoHistoryG1() {
     CHECK(same);
 }
 
+// -----------------------------------------------------------------------------
+// Fase 2: parser (docs/testes.md §3, P1–P14 e robustez).
+// -----------------------------------------------------------------------------
+
+// Chama o parser e conta como falha se alguma exceção escapar (design.md §8:
+// o parser nunca lança para o chamador).
+static ParseResult parse(const std::string& text) {
+    try {
+        return parser::parseConfig(text);
+    } catch (...) {
+        ++g_checks;
+        ++g_fails;
+        std::cerr << "  exceção escapou do parser\n";
+        return ParseResult();
+    }
+}
+
+// Alguma mensagem contém TODOS os trechos pedidos? (as mensagens precisam
+// trazer linha, campo, valor e motivo, A3.3.6)
+static bool hasMessage(const std::vector<std::string>& messages, const std::vector<std::string>& parts) {
+    for (const std::string& message : messages) {
+        bool all = true;
+        for (const std::string& part : parts) {
+            if (message.find(part) == std::string::npos) all = false;
+        }
+        if (all) return true;
+    }
+    return false;
+}
+
+// Arquivo do P1; os casos P2–P4 e P6 são variações dele e devem dar o mesmo resultado.
+static const std::string P1_TEXT =
+    "RM;2;2\n"
+    "1;ff0000;0;1;4;4\n"
+    "2;00FF00;0;2;6;6\n"
+    "3;0000ff;1;1;8;8\n";
+
+// "Mesmo resultado" = mesma Config (comparada pelo texto de serializeConfig,
+// que tem todos os campos do arquivo) e mesmas mensagens.
+static bool sameResult(const ParseResult& a, const ParseResult& b) {
+    return parser::serializeConfig(a.config) == parser::serializeConfig(b.config) &&
+           a.errors == b.errors && a.warnings == b.warnings;
+}
+
+// P1–P4, P6: caso feliz e variações de formatação que NÃO podem mudar nada
+// (A3.3.2, A3.3.3, A3.3.6, A3.3.7).
+static void testParserFormatting() {
+    const ParseResult p1 = parse(P1_TEXT);
+    CHECK(p1.ok());
+    CHECK(p1.warnings.empty());
+    CHECK_EQ(p1.config.algorithm, std::string("RM"));
+    CHECK_EQ(p1.config.quantum, 2);
+    CHECK_EQ(p1.config.cpuCount, 2);
+    CHECK_EQ(p1.config.tasks.size(), 3u);
+    CHECK_EQ(p1.config.tasks[0].color, std::string("FF0000"));  // normalizada em maiúsculas
+    CHECK_EQ(p1.config.tasks[2].color, std::string("0000FF"));
+    CHECK_EQ(p1.config.tasks[1].duration, 2);
+    CHECK_EQ(p1.config.tasks[1].period, 6);
+    CHECK_EQ(p1.config.tasks[2].arrival, 1);
+    CHECK_EQ(p1.config.tasks[2].deadline, 8);
+    CHECK(!p1.config.tasks[0].ignored);
+
+    // P2: fim de linha do Windows (\r\n) e também CR isolado.
+    std::string crlf, cr;
+    for (char c : P1_TEXT) {
+        crlf += (c == '\n') ? std::string("\r\n") : std::string(1, c);
+        cr += (c == '\n') ? '\r' : c;
+    }
+    CHECK(sameResult(parse(crlf), p1));
+    CHECK(sameResult(parse(cr), p1));
+
+    // P3: BOM UTF-8 no início (o Bloco de Notas grava assim).
+    CHECK(sameResult(parse("\xEF\xBB\xBF" + P1_TEXT), p1));
+    const ParseResult bomEdf = parse("\xEF\xBB\xBF" "EDF;2;1\n1;FF0000;0;1;4;4\n");
+    CHECK(bomEdf.ok());
+    CHECK_EQ(bomEdf.config.algorithm, std::string("EDF"));  // o BOM não "gruda" no algoritmo
+
+    // P4: ';' final em algumas linhas (inclusive a do sistema) e em outras não.
+    CHECK(sameResult(parse("RM;2;2;\n1;ff0000;0;1;4;4;\n2;00FF00;0;2;6;6\n3;0000ff;1;1;8;8;\n"), p1));
+
+    // P6: linhas em branco, linhas só com espaços/tabs e espaços em volta dos campos.
+    CHECK(sameResult(parse("\n   \n RM ; 2 ;2\n\t\n1 ; ff0000;0; 1 ;4;4\n\n2;00FF00 ;0;2;6;6  \n 3;0000ff;1;1;8;8\n   "), p1));
+
+    // Sinal '+' é aceito (na dúvida, aceitar: A3.3.7).
+    CHECK(sameResult(parse("RM;+2;2\n1;ff0000;+0;1;4;4\n2;00FF00;0;2;+6;6\n3;0000ff;1;1;8;+8\n"), p1));
+}
+
+// P5, P7–P10: linha do sistema, mínimo de linhas e ids.
+static void testParserSystemAndIds() {
+    // P5: maiúsculas e minúsculas tratadas como iguais [A3.3.2].
+    const ParseResult rm = parse("rM;2;1\n1;f0e0d0;0;1;4;4\n");
+    CHECK(rm.ok());
+    CHECK_EQ(rm.config.algorithm, std::string("RM"));
+    CHECK_EQ(rm.config.tasks[0].color, std::string("F0E0D0"));
+    const ParseResult edf = parse("edf;1;1\n1;FF0000;0;1;4;4\n");
+    CHECK_EQ(edf.config.algorithm, std::string("EDF"));
+    CHECK_EQ(edf.config.quantum, 1);
+
+    // Linha do sistema com campos vazios: padrões com aviso [A3.2].
+    const ParseResult defaults = parse(";;\n1;FF0000;0;1;4;4\n");
+    CHECK(defaults.ok());
+    CHECK_EQ(defaults.config.algorithm, std::string("RM"));
+    CHECK_EQ(defaults.config.quantum, 2);
+    CHECK_EQ(defaults.config.cpuCount, 1);
+    CHECK_EQ(defaults.warnings.size(), 3u);
+
+    // P7: só a linha do sistema (linhas em branco não contam).
+    const ParseResult onlySystem = parse("RM;2;1\n\n   \n");
+    CHECK(!onlySystem.ok());
+    CHECK(hasMessage(onlySystem.errors, {"ao menos 2 linhas"}));
+
+    // P8: algoritmo desconhecido: erro com a linha e a lista do registro.
+    const ParseResult unknown = parse("XYZ;2;1\n1;FF0000;0;1;4;4\n");
+    CHECK(!unknown.ok());
+    CHECK(hasMessage(unknown.errors, {"Linha 1", "XYZ", "EDF, RM"}));
+
+    // P9: qtde_cpus fora de 1..MAX_CPUS ou não inteiro [RG2] (D12).
+    for (const std::string bad : {"0", "65", "abc", "1.5", "-1"}) {
+        const ParseResult r = parse("RM;2;" + bad + "\n1;FF0000;0;1;4;4\n");
+        CHECK(!r.ok());
+        CHECK(hasMessage(r.errors, {"Linha 1", "qtde_cpus", "'" + bad + "'", "entre 1 e 64"}));
+    }
+    CHECK_EQ(parse("RM;2;1\n1;FF0000;0;1;4;4\n").config.cpuCount, 1);
+    CHECK_EQ(parse("RM;2;64\n1;FF0000;0;1;4;4\n").config.cpuCount, MAX_CPUS);
+    CHECK(!parse("RM;0;1\n1;FF0000;0;1;4;4\n").ok());  // quantum >= 1
+
+    // P10: id duplicado, sem diferenciar maiúsculas, citando as duas linhas.
+    const ParseResult dup = parse("RM;2;1\na1;FF0000;0;1;4;4\nX;00FF00;0;1;4;4\nA1;0000FF;0;1;4;4\n");
+    CHECK(!dup.ok());
+    CHECK(hasMessage(dup.errors, {"Linha 4", "'A1'", "linha 2"}));
+    CHECK(!parse("RM;2;1\n;FF0000;0;1;4;4\n").ok());  // id vazio
+}
+
+// P11: cores (D17, A2.1).
+static void testParserColors() {
+    for (const std::string bad : {"GG0000", "FFF", "1234567"}) {
+        const ParseResult r = parse("RM;2;1\n1;" + bad + ";0;1;4;4\n");
+        CHECK(!r.ok());
+        CHECK(hasMessage(r.errors, {"Linha 2", "'" + bad + "'", "RRGGBB"}));
+    }
+    const ParseResult hash = parse("RM;2;1\n1;#ff0000;0;1;4;4\n");
+    CHECK(hash.ok());
+    CHECK_EQ(hash.config.tasks[0].color, std::string("FF0000"));
+
+    // Vazia: paleta automática, sem erro; repetida ou preta: aviso e outra cor livre.
+    const ParseResult r = parse("RM;2;1\n1;FF0000;0;1;4;4\n2;;0;1;4;4\n3;ff0000;0;1;4;4\n4;000000;0;1;4;4\n");
+    CHECK(r.ok());
+    CHECK(hasMessage(r.warnings, {"Linha 3", "não tem cor"}));
+    CHECK(hasMessage(r.warnings, {"Linha 4", "FF0000", "já é usada na linha 2"}));
+    CHECK(hasMessage(r.warnings, {"Linha 5", "000000", "escura"}));
+    std::vector<std::string> colors;
+    for (const Task& t : r.config.tasks) colors.push_back(t.color);
+    std::sort(colors.begin(), colors.end());
+    CHECK(std::adjacent_find(colors.begin(), colors.end()) == colors.end());  // todas diferentes
+    CHECK(r.config.tasks[3].color != "000000");
+
+    // A paleta automática nunca escolhe preto nem branco, mesmo com muitas tarefas.
+    std::string many = "RM;2;1\n";
+    for (int i = 0; i < 300; ++i) many += "T" + std::to_string(i) + ";;0;1;5\n";
+    bool extremes = false;
+    for (const Task& t : parse(many).config.tasks) {
+        unsigned v = static_cast<unsigned>(std::stoul(t.color, nullptr, 16));
+        unsigned red = (v >> 16) & 0xFF, green = (v >> 8) & 0xFF, blue = v & 0xFF;
+        if ((red < 0x40 && green < 0x40 && blue < 0x40) || (red > 0xE0 && green > 0xE0 && blue > 0xE0)) extremes = true;
+    }
+    CHECK(!extremes);
+}
+
+// P12: número inválido em cada campo: erro com linha, campo e valor.
+static void testParserNumbers() {
+    struct Case { std::string line; std::string field; std::string value; };
+    const std::vector<Case> cases = {
+        {"1;FF0000;-1;1;4;4", "ingresso", "-1"},
+        {"1;FF0000;0;0;4;4", "duracao", "0"},
+        {"1;FF0000;0;1;x;4", "periodo", "x"},
+        {"1;FF0000;0;1;4;-2", "prazo", "-2"},
+        {"1;FF0000;0;1.5;4;4", "duracao", "1.5"},
+        {"1;FF0000;0;1;4;4;", "", ""},  // controle: válido
+        {"1;FF0000;0;1;1000000001;4", "periodo", "1000000001"},
+        {"1;FF0000;0;1", "periodo", ""},  // obrigatório ausente
+    };
+    for (const Case& c : cases) {
+        const ParseResult r = parse("RM;2;1\n" + c.line + "\n");
+        if (c.field.empty()) {
+            CHECK(r.ok());
+        } else {
+            CHECK(!r.ok());
+            CHECK(hasMessage(r.errors, {"Linha 2", "'" + c.field + "'", c.value}));
+        }
+    }
+    // periodo < 0 é erro no Projeto A (resposta do professor Q10), com mensagem própria.
+    const ParseResult negative = parse("RM;2;1\n1;FF0000;0;1;-5;4\n");
+    CHECK(!negative.ok());
+    CHECK(hasMessage(negative.errors, {"Linha 2", "'periodo'", "-5", "Projeto A"}));
+    // Vários erros na mesma linha aparecem todos de uma vez.
+    CHECK_EQ(parse("RM;2;1\n1;FF0000;-1;0;x;-2\n").errors.size(), 4u);
+}
+
+// P13: aperiódica ignorada com aviso (D7); BS01 com período > 0 é periódica comum (Q12).
+static void testParserScope() {
+    const ParseResult r = parse("RM;2;1\n1;FF0000;0;1;4;4\n2;00FF00;0;1;0;4\nBS01;0000FF;0;1;5;5\n");
+    CHECK(r.ok());
+    CHECK_EQ(r.config.tasks.size(), 3u);
+    const Task& aperiodic = r.config.tasks[1];
+    CHECK(aperiodic.ignored);
+    CHECK(aperiodic.kind == TaskKind::Aperiodic);
+    CHECK(!aperiodic.ignoredReason.empty());
+    CHECK(hasMessage(r.warnings, {"Linha 3", "'2'", "aperiódica"}));
+    const Task& server = r.config.tasks[2];
+    CHECK(!server.ignored);
+    CHECK(server.kind == TaskKind::Periodic);
+    CHECK(server.server == ServerType::None);
+    CHECK(!hasMessage(r.warnings, {"BS01"}));
+
+    // Prazo: vazio ou 0 => período, com aviso (A3.2, D8); maior que o período => aviso.
+    const ParseResult d = parse("RM;2;1\n1;FF0000;0;1;4;\n2;00FF00;0;1;5;0\n3;0000FF;0;5;4;8\n");
+    CHECK(d.ok());
+    CHECK_EQ(d.config.tasks[0].deadline, 4);
+    CHECK_EQ(d.config.tasks[1].deadline, 5);
+    CHECK(hasMessage(d.warnings, {"Linha 2", "prazo", "Usando o período (4)"}));
+    CHECK(hasMessage(d.warnings, {"Linha 4", "prazo (8)", "maior que o período"}));
+    CHECK(hasMessage(d.warnings, {"Linha 4", "duração (5)", "maior que o período"}));
+}
+
+// P14: ida e volta parseConfig -> serializeConfig -> parseConfig.
+static void testParserRoundTrip() {
+    const ParseResult first = parse("edf;3;2\n1;ff0000;0;1;4;\n2;;1;2;6;5;a;b;c\n3;00FF00;0;1;0;\n");
+    CHECK(first.ok());
+    const std::string text = parser::serializeConfig(first.config);
+    const ParseResult second = parse(text);
+    CHECK(second.ok());
+    CHECK_EQ(parser::serializeConfig(second.config), text);
+    CHECK_EQ(second.config.algorithm, std::string("EDF"));
+    CHECK_EQ(second.config.quantum, 3);
+    CHECK_EQ(second.config.cpuCount, 2);
+    CHECK_EQ(second.config.tasks[0].deadline, 4);                    // prazo vazio => período
+    CHECK_EQ(second.config.tasks[1].rawEvents, std::string("a;b;c"));  // ';' internos preservados
+    CHECK_EQ(second.config.tasks[1].color, first.config.tasks[1].color);  // cor automática fixada
+    CHECK(second.config.tasks[2].ignored);                           // aperiódica continua ignorada
+    CHECK(hasMessage(first.warnings, {"Linha 3", "lista de eventos"}));
+}
+
+// Robustez (testes.md §3): nada disso pode lançar exceção nem travar.
+static void testParserRobustness() {
+    CHECK(hasMessage(parse("").errors, {"vazio"}));
+    CHECK(hasMessage(parse("   \n\t\n  \r\n").errors, {"vazio"}));
+
+    // Nenhuma tarefa simulável (todas aperiódicas): erro claro.
+    const ParseResult allIgnored = parse("RM;2;1\n1;FF0000;0;1;0;4\n2;00FF00;0;1;0;4\n");
+    CHECK(!allIgnored.ok());
+    CHECK(hasMessage(allIgnored.errors, {"Nenhuma tarefa periódica"}));
+
+    // Linha de 1 MB (vai inteira para a lista de eventos).
+    const ParseResult hugeLine = parse("RM;2;1\n1;FF0000;0;1;4;4;" + std::string(1 << 20, 'x') + "\n");
+    CHECK(hugeLine.ok());
+    CHECK_EQ(hugeLine.config.tasks[0].rawEvents.size(), static_cast<std::size_t>(1 << 20));
+
+    // Bytes binários (todos os 256 valores, repetidos): erro, sem exceção.
+    std::string binary;
+    for (int i = 0; i < 4096; ++i) binary += static_cast<char>(i * 37);
+    CHECK(!parse(binary).ok());
+
+    // 100 000 tarefas sem cor carregam em tempo razoável (< 5 s, folgado).
+    std::string big = "EDF;2;4\n";
+    for (int i = 0; i < 100000; ++i) big += std::to_string(i) + ";;0;1;" + std::to_string(10 + i % 50) + "\n";
+    const auto start = std::chrono::steady_clock::now();
+    const ParseResult many = parse(big);
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::steady_clock::now() - start).count();
+    CHECK(many.ok());
+    CHECK_EQ(many.config.tasks.size(), 100000u);
+    CHECK(ms < 5000);
+    std::cout << "  (parser: 100 000 tarefas em " << ms << " ms)\n";
+}
+
 // Executa todos os testes e imprime o placar "N checks, M falhas".
 int main() {
     testBuildSmoke();
@@ -481,6 +757,13 @@ int main() {
     testNaturalIdLess();
     testInvariantChecker();
     testDemoHistoryG1();
+    testParserFormatting();
+    testParserSystemAndIds();
+    testParserColors();
+    testParserNumbers();
+    testParserScope();
+    testParserRoundTrip();
+    testParserRobustness();
 
     std::cout << g_checks << " checks, " << g_fails << " falhas\n";
     return g_fails == 0 ? 0 : 1;
