@@ -44,7 +44,7 @@ SystemSnapshot Simulator::computeNext(const SystemSnapshot& now) const {
 
     releaseActivations(next);
     checkDeadlines(next);
-    std::vector<int> order = scheduler(next);   // política
+    PriorityGroups order = scheduler(next);     // política: o escalonador devolve grupos de prioridade
     dispatch(next, order);                      // mecanismo
     runOneTick(next);
     finishActivations(next);
@@ -54,15 +54,15 @@ SystemSnapshot Simulator::computeNext(const SystemSnapshot& now) const {
 }
 
 // Etapas: cada uma é a próxima coisa a implementar, nesta ordem.
-void Simulator::releaseActivations(SystemSnapshot& s) const { 
+void Simulator::releaseActivations(SystemSnapshot& /*s*/) const { 
     /* TODO */ 
 }
 
-void Simulator::checkDeadlines(SystemSnapshot& s) const { 
+void Simulator::checkDeadlines(SystemSnapshot& /*s*/) const { 
     /* TODO */ 
 }
 
-void Simulator::dispatch(SystemSnapshot& s, const std::vector<int>& order) const { 
+void Simulator::dispatch(SystemSnapshot& /*s*/, const PriorityGroups& /*order*/) const { 
     /* TODO */ 
 }
 
@@ -86,6 +86,6 @@ void Simulator::runOneTick(SystemSnapshot& s) const {
     }
 }
 
-void Simulator::finishActivations(SystemSnapshot& s) const { 
+void Simulator::finishActivations(SystemSnapshot& /*s*/) const { 
     /* TODO */ 
 }

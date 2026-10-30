@@ -20,7 +20,7 @@ private:
 
     void releaseActivations(SystemSnapshot& s) const;
     void checkDeadlines   (SystemSnapshot& s) const;
-    void dispatch         (SystemSnapshot& s, const std::vector<int>& order) const;
+    void dispatch         (SystemSnapshot& s, const PriorityGroups& order) const;
     void runOneTick       (SystemSnapshot& s) const;
     void finishActivations(SystemSnapshot& s) const;
 
