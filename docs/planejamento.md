@@ -12,13 +12,14 @@ Cole no Claude Code, uma fase por vez:
 
 **Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); cada um integra a própria branch na `main` (PR opcional, sem aprovação obrigatória) e avisa o outro para ler as mudanças; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
 
-## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 3)
+## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 4)
 
 - **Fase 0:** concluída e integrada.
 - **Fase 1: integrada na `main`.** `Model.h` reúne `Task`, `Job`, `CPU`, `Occurrence`, `SystemSnapshot`, `Config`, `ParseResult` (com `ok()`), `Edit`/`EditKind`/`EditResult`, `MAX_CPUS` e as ajudas `currentJob`, `isCandidate`, `naturalIdLess` (por blocos); `Task.h`, `CPU.h`, `SystemSnapshot.h` e `Task.cpp` saíram. Declarados sem definição: `parser::serializeConfig` (Fase 2) e `Simulator::reset/jumpTo/runToEnd/applyEdit` + `RunSummary`/`DEFAULT_MAX_TICKS` (Fase 4). Em `tests.cpp`: `serializeSnapshot`, `checkInvariants` (invariantes 1, 2, 3, 4, 5, 7, 8), `taskOn`/`countOcc`/`occTicks`. Fixture `demoHistoryG1()` (instantes 0–12, montado à mão) em `Simulator.cpp`, marcado TEMPORÁRIO (remover na Fase 7). `sim_tests`: 71 checks.
 - **Fase 2: integrada na `main`.** `parseConfig` conforme §8 (exceções contidas, sinal `+`, paleta sem preto/branco, troca de cor quase preta/quase branca), `serializeConfig`, P1–P14 e robustez.
-- **Fase 3: concluída na branch `fase-3-motor`** (aguardando merge). Motor completo na ordem do §6 (`finishActivations`, `releaseActivations`, `checkDeadlines`, `chooseTasks`, `dispatch` com afinidade em duas passadas); `orderAndGroup` público (algoritmo novo = função-chave). Testes: G1 (idêntico ao `demoHistoryG1`), G2 RM/EDF, G3, G4, G4b (critério 1 isolado), FIFO, invariantes 1–9 e fuzz de 10 000 sistemas (~2,5 M snapshots). `sim_tests`: 268 checks; `--grid` imprime as grades.
-- **Fase 4:** a API já está declarada em `Simulator.h` (Fase 1); falta definir e testar.
+- **Fase 3: integrada na `main`.** Motor completo (§6), G1–G4, G4b, FIFO, invariantes 1–9, fuzz de 10 000 sistemas; `sim_tests --grid` e `--rapido`.
+- **Fase 4: concluída na branch `fase-4-historico`** (aguardando merge). `reset`, `jumpTo`, `runToEnd` (limites de instantes e de memória estimada), `applyEdit` para as 16 `EditKind` (D28/D15, com reaplicação das edições do mesmo instante; `Simulator` guarda a `Config` e `edits_`), `beginInstant`/`scheduleAndDispatch` separados. Testes: G5, G6, cada edição, `runToEnd`, fuzz de edições. `sim_tests`: 1286 checks (~35 s; `--rapido` ~4 s).
+- **Núcleo completo** (Fases 1–4). Próximas: Fase 5 (Gantt, pode usar `demoHistoryG1` ou o motor real) e Fase 6 (janela).
 
 ## 1. Calendário (hoje = 23/10/2026; defesa do A = 09/11/2026)
 
@@ -158,9 +159,9 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 3. Testes **G5 e G6**, recusas, invariante 10, e uma verificação do `runToEnd` contra o limite (config que geraria histórico gigante).
 
 **Critérios de aceitação**
-- [ ] G5 (incluindo todas as recusas) e G6 verdes; histórico idêntico ao de execução direta.
-- [ ] Edição inválida nunca muda `history`/`cursor`.
-- [ ] `runToEnd` nunca trava nem estoura memória.
+- [x] G5 (incluindo todas as recusas) e G6 verdes; histórico idêntico ao de execução direta.
+- [x] Edição inválida nunca muda `history`/`cursor`.
+- [x] `runToEnd` nunca trava nem estoura memória.
 
 **Commit:** `Simulator: histórico, retroceder/avançar e edição manual validada`.
 

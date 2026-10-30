@@ -16,7 +16,7 @@
 - `tests.cpp` também contém `printGrid(const std::vector<SystemSnapshot>&, int maxTicks)`: imprime uma linha por tick (`tick | CPU1 CPU2 ...` com o ID da tarefa ou `-`) e a lista de ocorrências do instante. Use-a para depurar e para a Fase 3 (sem GUI).
 - `runConfig(text)`: faz `parseConfig` → `Simulator::load` → `runToEnd` e devolve o histórico. As configs de teste são **strings embutidas** no arquivo (não criar arquivos extras: orçamento de 18).
 - Helpers: `taskOn(history, tick, cpu)` (ID ou "-"), `countOcc(history, type, taskId)`, `occAt(history, tick, type)`.
-- Rodar: `cmake --build build --target sim_tests && ./build/sim_tests` (a cada commit). Saída final: `N checks, M falhas`. `sim_tests --grid` imprime as grades de G1, G2 (RM e EDF) e G3. O fuzz de 10 000 sistemas leva ~20 s no build Release; `sim_tests --rapido` roda só 500 (dia a dia). Antes de integrar na `main`, rodar o completo.
+- Rodar: `cmake --build build --target sim_tests && ./build/sim_tests` (a cada commit). Saída final: `N checks, M falhas`. `sim_tests --grid` imprime as grades de G1, G2 (RM e EDF) e G3. O completo leva ~35 s no build Release (fuzz de 10 000 sistemas + fuzz de 200 sistemas com edições); `sim_tests --rapido` roda 500 + 30 (~4 s, dia a dia). Antes de integrar na `main`, rodar o completo.
 
 ---
 
@@ -95,6 +95,12 @@ Procedimento: carregar G1; `stepForward` até `cursor == 4`; `applyEdit(Suspend,
 - Avançar 30, voltar 30, avançar 30 ⇒ cada `history[k]` é **idêntico** ao de uma execução direta (comparar via serialização textual do `SystemSnapshot`).
 - `jumpTo(k)` para trás e para frente mantém `current().tick == k`.
 - Voltar a `k = 10`, aplicar uma edição válida ⇒ `history.size() == 11` (futuro descartado) e a nova linha do tempo é determinística (rodar duas vezes dá o mesmo).
+
+### Edição: casos extras (Fase 4)
+- Duas edições no **mesmo** instante: a 2ª não apaga a 1ª. Edição no instante 0 (parte da `Config`).
+- Cada `EditKind`: um caminho aceito e as recusas principais (design.md §9).
+- `runToEnd`: termina; para no limite de instantes (e dá para continuar); para no limite de memória.
+- **Fuzz de edições:** sequências aleatórias de avançar/voltar/pular/editar; toda recusa deixa `history`/`cursor` idênticos; invariantes no histórico inteiro; a mesma sequência dá o mesmo histórico.
 
 ---
 
