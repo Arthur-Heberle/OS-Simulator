@@ -130,7 +130,7 @@ OS-Simulator/
 | D11 | CPU sem tarefa | Fica **desligada**; contam-se ticks desligados por CPU (painel + hachura cinza no Gantt). Custo de troca de contexto = 0 (documentado) | A1.2 |
 | D12 | Limite N de CPUs | `MAX_CPUS = 64` (uma constante) | Servidores comuns chegam a 64 núcleos por socket; acima disso o Gantt por CPU perde legibilidade; o histórico cresce com ticks × (tarefas + CPUs). Justificativa técnica exigida em Q6 |
 | D13 | Quantum | Lido, validado (inteiro ≥ 1), guardado, exibido; RM e EDF ignoram; `CPU.quantumUsed` é mantido para algoritmos futuros | Q4: específico de cada escalonador |
-| D14 | Desempate (A4.3) | Ordem: (1) estava `Running` antes do escalonamento; (2) menor prazo **absoluto** da ocorrência corrente; (3) menor ingresso; (4) menor duração; (5) **sorteio determinístico** `tieHash(seed, tick, taskIndex)` (splitmix64), sem estado. Ícone de dado em `x=k` na tarefa escolhida. Só se emite o ícone quando o sorteio realmente decide algo (`|grupo empatado| > slotsLeft`) | Sem estado ⇒ retroceder/avançar e re-simular após edição reproduzem o mesmo sorteio; evita guardar `mt19937` (~2,5 KB) em cada snapshot; `std::uniform_int_distribution` não é portável entre compiladores |
+| D14 | Desempate (A4.3) | Ordem: (1) estava `Running` antes do escalonamento; (2) menor prazo **absoluto** da ocorrência corrente; (3) menor ingresso; (4) menor duração; (5) **sorteio determinístico** `tieHash(seed, tick, taskIndex)` (splitmix64), sem estado, feito pelo `Simulator` sobre os grupos de empate que o escalonador devolve (§7). Ícone de dado em `x=k` na tarefa escolhida. Só se emite o ícone quando o sorteio realmente decide algo (`|grupo empatado| > slotsLeft`). (2) confirmado pelo professor (Q11) | Sem estado ⇒ retroceder/avançar e re-simular após edição reproduzem o mesmo sorteio; evita guardar `mt19937` (~2,5 KB) em cada snapshot; `std::uniform_int_distribution` não é portável entre compiladores |
 | D15 | Edição no passado | Editar no passo `k` descarta `history[k+1..]` e segue da nova linha do tempo; ícone "edição manual" em `x=k` | Causalidade: o futuro antigo deixou de valer |
 | D16 | Histórico | 1 snapshot completo por tick, em memória; sem threads | A1.5.2; sem threads não há corrida e o determinismo é trivial |
 | D17 | Cores | Hex RGB de 6 dígitos (tolera `#`, caixa livre); fora disso é erro. Cor ausente ⇒ paleta automática. Cor repetida ou escura demais (preta) ⇒ **aviso**, e a tarefa recebe a próxima cor livre da paleta (ideia do Arthur) | A2.1 exige uma cor diferente por tarefa e reserva o preto para "suspensa": trocar a cor garante isso sem barrar um arquivo válido |
@@ -284,7 +284,7 @@ SystemSnapshot makeNext(const SystemSnapshot& prev) {
 1. **Conclusões.** Para cada tarefa com `jobs.front().remaining == 0`: ocorrência `Termination` (x = tick); remove o job; `completed++`; libera a CPU (`cpu.taskIndex=-1`, `task.cpu=-1`; `lastCpu` permanece). Se ainda há job pendente → `Ready`; senão, se `released == LIMIT` → `Terminated` + ocorrência `TaskFinished`; senão `Dormant`. Registrar `finishTime`.
 2. **Ativações.** Para cada tarefa não `ignored` com `nextRelease == tick` e `released < LIMIT`: criar `Job{release=tick, absDeadline=tick+deadline, duration, remaining=duration}`, `released++`, `nextRelease += period`, ocorrência `Arrival` (nota "enfileirada" se já havia job). Estado: `NotArrived`/`Dormant` ⇒ `Ready`; `Ready`/`Running` ⇒ continua (backlog); `Suspended` ⇒ continua `Suspended`.
 3. **Perdas de prazo.** Para cada job com `absDeadline == tick`, `remaining > 0` e `!missed`: `missed=true`, `deadlineMisses++`, ocorrência `DeadlineMiss`.
-4. **Escalonamento.** `candidates` = tarefas com `isCandidate`. Seja `M = cpus.size()`. Se `candidates.size() ≤ M`: todas executam (sem chamar o escalonador, logo sem sorteio inútil). Senão chamar o escalonador `M` vezes (`slotsLeft = M, M-1, …`), removendo a escolhida da lista.
+4. **Escalonamento.** O escalonador do `snapshot.algorithm` devolve os `PriorityGroups` dos candidatos (`isCandidate`); `chooseTasks` pega grupo a grupo até preencher `M = cpus.size()` CPUs e só sorteia quando um grupo empatado não cabe nas CPUs que sobram (§7). Se `candidatos ≤ M`, todos executam e não há sorteio.
 5. **Despacho** (`chosen` em ordem de escolha):
    a. `Running` fora de `chosen` ⇒ `Ready`, libera CPU, `preemptions++`, `Preemption`.
    b. `chosen` já `Running` ⇒ permanece (mesma CPU).
@@ -302,32 +302,29 @@ SystemSnapshot makeNext(const SystemSnapshot& prev) {
 
 ## 7. Escalonadores e registro (A4.2)
 
-```cpp
-struct SchedContext {
-    Tick now;
-    const std::vector<Task>& tasks;
-    const std::vector<CPU>&  cpus;
-    const std::vector<int>&  candidates;      // índices elegíveis ainda não escolhidos neste instante
-    int      slotsLeft;                       // CPUs ainda a preencher
-    int      quantum;
-    uint64_t seed;
-};
-struct SchedDecision { int taskIndex = -1; bool tieDraw = false; };   // -1 = nenhuma
-using SchedFn  = SchedDecision (*)(const SchedContext&);
-using KeyFn    = Tick (*)(const Task&);       // menor = mais prioritário
+**Política × mecanismo** (modelo do Arthur, adotado): o escalonador (**política**) só diz a **ordem de prioridade**; não altera o estado, não conhece CPUs, não sorteia. O `Simulator` (**mecanismo**) escolhe quem executa, faz o sorteio, despacha e cuida das filas. Assim um algoritmo novo não toca no motor (A4.2).
 
-void       registerBuiltInSchedulers();       // chamado explicitamente (evita ordem de inicialização estática)
-void       registerScheduler(const std::string& name, SchedFn fn);   // chave em MAIÚSCULAS
-SchedFn    findScheduler(const std::string& name);                   // sem diferenciar caixa; nullptr se não existe
-std::vector<std::string> schedulerNames();    // alimenta o parser e a GUI
-uint64_t   tieHash(uint64_t seed, Tick now, int taskIndex);          // splitmix64
-SchedDecision pickByKey(const SchedContext&, KeyFn key);             // aplica A4.3
+```cpp
+// Índices de tasks agrupados por prioridade, do grupo mais prioritário ao menos.
+// Tarefas do mesmo grupo continuam empatadas depois dos critérios (1)–(4) do A4.3.
+using PriorityGroups = std::vector<std::vector<int>>;
+using SchedulerFn    = PriorityGroups (*)(const SystemSnapshot&);
+using KeyFn          = Tick (*)(const Task&);  // menor = mais prioritário
+
+PriorityGroups scheduleRM (const SystemSnapshot&);
+PriorityGroups scheduleEDF(const SystemSnapshot&);
+void        registerScheduler(const std::string& name, SchedulerFn fn);  // chave em MAIÚSCULAS
+SchedulerFn findScheduler(const std::string& name);                     // sem diferenciar caixa; nullptr se não existe
+std::vector<std::string> schedulerNames();                              // alimenta o parser e a GUI
+uint64_t    tieHash(uint64_t seed, Tick now, int taskIndex);            // splitmix64 (D14)
 ```
 
-- **RM:** chave = `period` (menor primeiro). **EDF:** chave = `jobs.front().absDeadline`.
-- `pickByKey`: filtra os candidatos de melhor chave → (1) se algum está `Running`, fica só com os `Running`; (2) menor `absDeadline`; (3) menor `arrival`; (4) menor `duration`; (5) se restar mais de um, vence o de menor `tieHash`, e `tieDraw = (restantes > slotsLeft)`.
-- **Extensibilidade provada por teste:** `tests.cpp` registra um escalonador FIFO e roda uma simulação sem tocar no motor. (Opcional, só no fim: carregar `SchedFn` de uma DLL com `QLibrary`.)
-- Adicionar um algoritmo = escrever 1 função + 1 linha em `registerBuiltInSchedulers()`.
+- **RM:** chave = `period`. **EDF:** chave = `jobs.front().absDeadline`.
+- `compareTasks(a, b, key)` devolve -1/0/1: chave → (1) estava `Running` → (2) menor prazo **absoluto** da ocorrência corrente (Q11) → (3) menor `arrival` → (4) menor `duration`. `orderAndGroup` ordena os candidatos com `std::stable_sort` e junta em grupos os que dão 0. **O sorteio nunca fica no comparador** (comparador aleatório = comportamento indefinido no `sort`).
+- `chooseTasks` (no `Simulator`): percorre os grupos; um grupo que cabe inteiro nas CPUs livres entra todo (sem sorteio); o primeiro que não cabe é ordenado por `tieHash` e só os `slotsLeft` primeiros entram, marcados com `tieDraw` (ícone de sorteio, A4.3). Isso cobre o atalho "candidatos ≤ M ⇒ todos executam".
+- O registro é um mapa estático local criado na primeira chamada já com RM e EDF (sem problema de ordem de inicialização estática). `registerScheduler` permite incluir algoritmos sem editar `Scheduler.cpp`.
+- **Extensibilidade provada por teste:** `tests.cpp` registra um escalonador FIFO e roda uma simulação sem tocar no motor. (Opcional, só no fim: carregar `SchedulerFn` de uma DLL com `QLibrary`.)
+- Adicionar um algoritmo = escrever 1 função-chave + 1 linha no registro (ou 1 chamada a `registerScheduler`).
 
 ---
 
@@ -477,7 +474,7 @@ Resumo; o detalhe (cenários, entradas e saídas esperadas) está em `testes.md`
 - `TaskKind`/`ServerType` já existem no modelo; no A o prefixo `BS/PS/DS/SS` não é interpretado (Q12) e `ignored` (aperiódicas) é só uma flag. No B: reconhecer o prefixo no parser e `periodo < 0` como esporádica.
 - `Task.rawEvents` guarda `lista_eventos`; o B acrescenta `std::vector<TaskEvent>` sem limite de tamanho.
 - `Suspended` com `blockReason` e `effPriority` separada de `basePriority` ⇒ mutex, herança/teto de prioridade, inversão de prioridades, E/S, troca de dados.
-- Fila global de aperiódicas acessada pelos servidores; servidor = `Task` periódica com `serverBudget` (reposição no B). `SchedContext` pode ganhar campos sem quebrar RM/EDF.
+- Fila global de aperiódicas acessada pelos servidores; servidor = `Task` periódica com `serverBudget` (reposição no B). O escalonador recebe o `SystemSnapshot` inteiro, então campos novos não quebram RM/EDF.
 - Renderizador com mapa **estado → estilo** (pen/brush/padrão) para os preenchimentos de servidor e aperiódica (B4). Tipo de ocorrência desconhecido ⇒ ícone genérico + entrada na legenda.
 - Teste de escalonabilidade (B3): função pura `admit(snapshot, task)` que aceita ou recusa com motivo; o painel de utilização do A é a base.
 - A API de edição (`AddTask`) já serve para criar aperiódicas/esporádicas durante a execução.
@@ -497,7 +494,7 @@ Resumo; o detalhe (cenários, entradas e saídas esperadas) está em `testes.md`
 8. **Por que o escalonador roda a cada tick? Complexidade?** Preemptivo; O(M·n) por tick, irrelevante em simulação.
 9. **Onde está o TCB e o que guarda?** `Task` em `Model.h` (A1.3).
 10. **Como sabem que RM/EDF estão corretos?** Cenários G1/G2 calculados à mão + invariantes em fuzz.
-11. **Como o quantum entraria num algoritmo por fatia de tempo?** `CPU.quantumUsed` + `SchedContext.quantum` (D13).
+11. **Como o quantum entraria num algoritmo por fatia de tempo?** `CPU.quantumUsed` + `SystemSnapshot.quantum`, lidos pela função do escalonador (D13).
 12. **Por que Qt e como garantem o standalone?** D26 + resposta do professor; mostrar a pasta `dist/` rodando sem Qt instalado.
 13. **Por que o Gantt exportado não é print?** O mesmo `GanttRenderer::paint` desenha em `QImage`/`QSvgGenerator`.
 14. **O que acontece com arquivo inválido? E com arquivo válido incomum?** D18; testes P1–P14.

@@ -126,7 +126,7 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 **Objetivo:** motor determinístico, sem GUI, validado por cenários calculados à mão.
 
 **Tarefas**
-1. `Scheduler.cpp`: registro (`registerBuiltInSchedulers`, `registerScheduler`, `findScheduler`, `schedulerNames`), `tieHash` (splitmix64), `pickByKey` (A4.3 na ordem 1→5, `tieDraw` só quando decide), **RM** (chave = `period`) e **EDF** (chave = `jobs.front().absDeadline`). Trocar a lista provisória do Parser pelo registro.
+1. `Scheduler.cpp`: registro (`registerScheduler`, `findScheduler`, `schedulerNames`), `tieHash` (splitmix64), `compareTasks`/`orderAndGroup` (A4.3 critérios 1→4, grupos de empate), **RM** (chave = `period`) e **EDF** (chave = `jobs.front().absDeadline`); `chooseTasks` no `Simulator` faz o critério 5 (sorteio só quando o grupo não cabe). *(Já adiantado na `main`: conferir e completar.)*
 2. `Simulator.cpp`, como **funções livres sobre `SystemSnapshot&`** (sem I/O, sem estado global): `initState(Config)`, `executeTick`, `beginInstant` (conclusões → ativações → perdas de prazo), `scheduleAndDispatch` (candidatos; atalho `candidatos ≤ M`; `M` chamadas ao escalonador; despacho com afinidade; CPU on/off; `readyQueue`), `makeNext`, `finished`. Ordem **exatamente** como em `design.md` §6.
 3. Em `tests.cpp`: `printGrid`, `runConfig`, helpers e os testes **G1, G2 (RM e EDF), G3, G4**, o **teste FIFO** (A4.2), as **invariantes** (§4) e o **fuzz** (§5). Gerar o histórico completo até `finished` (sem a classe `Simulator` ainda: usar `makeNext` em laço).
 4. Se algum resultado dourado divergir do motor, **não ajustar o teste**: reexaminar o cálculo e relatar.
