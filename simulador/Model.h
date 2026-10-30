@@ -113,6 +113,73 @@ inline bool isCandidate(const Task& t) {
     return !t.ignored && (t.state == TaskState::Ready || t.state == TaskState::Running);
 }
 
+// Ordem natural de IDs: decide a ordem das linhas do Gantt [A2.5] e das
+// tabelas (D4). O id é texto (o Projeto B usa "BS01"), mas "2" deve vir
+// antes de "10". Por isso a comparação é feita por BLOCOS: cada id é lido
+// como uma sequência de blocos de dígitos e de não-dígitos, e os blocos são
+// comparados em ordem:
+//   - dígitos x dígitos: pelo valor numérico ("2" < "10"; "T2" < "T10");
+//   - texto x texto: sem diferenciar maiúsculas [A3.3.2];
+//   - dígitos x texto: o número vem antes;
+//   - se um id acaba antes (é prefixo do outro), ele vem antes.
+// Empate total (ex.: "01" e "1") é desfeito pelo texto original, para a ordem
+// ser total e o resultado não depender do algoritmo de ordenação.
+// Por que blocos, e não "numérico se os dois forem números, senão texto":
+// essa regra não é transitiva (2 < 10 pelo número; 10 < 1A e 1A < 2 pelo
+// texto formam um ciclo), e um critério não transitivo quebra o std::sort.
+inline bool naturalIdLess(const std::string& a, const std::string& b) {
+    auto isDigit = [](char c) { return c >= '0' && c <= '9'; };
+    auto upper = [](char c) { return (c >= 'a' && c <= 'z') ? static_cast<char>(c - 'a' + 'A') : c; };
+
+    std::size_t i = 0, j = 0;
+    while (i < a.size() && j < b.size()) {
+        bool aDigit = isDigit(a[i]);
+        bool bDigit = isDigit(b[j]);
+        if (aDigit != bDigit) {
+            return aDigit;  // bloco numérico antes de bloco de texto
+        }
+        // Fim dos blocos atuais: [i, endA) em 'a' e [j, endB) em 'b'.
+        std::size_t endA = i, endB = j;
+        while (endA < a.size() && isDigit(a[endA]) == aDigit) ++endA;
+        while (endB < b.size() && isDigit(b[endB]) == bDigit) ++endB;
+
+        if (aDigit) {
+            // Valor numérico sem converter para int (não estoura com ids longos):
+            // ignora zeros à esquerda; mais algarismos = maior; mesmo tamanho =
+            // compara algarismo a algarismo.
+            std::size_t startA = i, startB = j;
+            while (startA + 1 < endA && a[startA] == '0') ++startA;
+            while (startB + 1 < endB && b[startB] == '0') ++startB;
+            std::size_t lenA = endA - startA, lenB = endB - startB;
+            if (lenA != lenB) {
+                return lenA < lenB;
+            }
+            int cmp = a.compare(startA, lenA, b, startB, lenB);
+            if (cmp != 0) {
+                return cmp < 0;
+            }
+        } else {
+            // Texto sem diferenciar maiúsculas; bloco mais curto (prefixo) vem antes.
+            std::size_t k = 0;
+            while (i + k < endA && j + k < endB) {
+                char ca = upper(a[i + k]), cb = upper(b[j + k]);
+                if (ca != cb) {
+                    return ca < cb;
+                }
+                ++k;
+            }
+            if ((endA - i) != (endB - j)) {
+                return (endA - i) < (endB - j);
+            }
+        }
+        i = endA;
+        j = endB;
+    }
+    if (i == a.size() && j != b.size()) return true;   // 'a' acabou antes: é prefixo de 'b'
+    if (j == b.size() && i != a.size()) return false;
+    return a < b;  // mesmos blocos: desempate pelo texto original
+}
+
 // ---------------------------------------------------------------------------
 // Processador
 // ---------------------------------------------------------------------------
