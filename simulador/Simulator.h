@@ -58,6 +58,13 @@ std::vector<int> chooseTasks(const SystemSnapshot& s, const PriorityGroups& grou
 // 6. despacho: preempção, afinidade de CPU, CPU ligada/desligada, fila de prontos.
 void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vector<int>& drawn);
 
+// Regra da edição manual (D21: função livre): valida 'edit' contra o estado
+// 's' (já depois de beginInstant) e, se for aceita, aplica e registra a
+// ocorrência ManualEdit. Se for recusada, devolve ok = false com o motivo em
+// português [A3.4] e pode ter mexido em 's' (o chamador usa uma cópia).
+// Regras de cada tipo: design.md §9.
+EditResult applyEditTo(SystemSnapshot& s, const Edit& edit);
+
 // Limite de instantes do "executar até o fim" (A1.5.3, design.md §9): impede que
 // uma configuração enorme trave a interface ou esgote a memória do histórico.
 constexpr Tick DEFAULT_MAX_TICKS = 2000000;
@@ -90,7 +97,7 @@ std::vector<SystemSnapshot> demoHistoryG1();
 // ---------------------------------------------------------------------------
 class Simulator {
 public:
-    Simulator() : history_(1) {}            // snapshot vazio: current() é sempre válido
+    Simulator() : history_(1), edits_(1) {} // snapshot vazio: current() é sempre válido
 
     // Zera o histórico e gera history[0]. false se o algoritmo não está registrado.
     // Guarda a Config: é a base para editar o instante 0 (não existe history[-1]).
@@ -128,4 +135,8 @@ private:
     std::vector<SystemSnapshot> history_;   // history_[k] = estado no instante k
     std::size_t cursor_ = 0;                // instante mostrado ao usuário (relógio global, A1.5.2)
     Config config_;                         // configuração carregada (base do instante 0)
+    // edits_[k] = edições aplicadas no instante k, em ordem (paralelo a history_).
+    // Não é estado da simulação: é o registro de COMO history_[k] foi produzido,
+    // para uma nova edição em k reaplicar as anteriores (design.md §9).
+    std::vector<std::vector<Edit>> edits_;
 };
