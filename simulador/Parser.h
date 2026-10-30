@@ -54,6 +54,7 @@ enum class MsgCode {
     // Errors: there is no sensible default, so the item cannot be used
     // (o arquivo inteiro não é carregado; design.md §8, D18)
     EmptyFile,
+    InternalError,
     TooFewLines,
     NoValidTasks,
     UnknownAlgorithm,
@@ -86,6 +87,8 @@ struct MessageInfo {
 inline const std::map<MsgCode, MessageInfo> MESSAGES = {
     {MsgCode::EmptyFile,
      {Severity::Error, "O arquivo de configuração está vazio."}},
+    {MsgCode::InternalError,
+     {Severity::Error, "Não foi possível ler o arquivo (falha interna: {}). Nada foi carregado."}},
     {MsgCode::TooFewLines,
      {Severity::Error, "O arquivo precisa ter ao menos 2 linhas: a 1ª com 'algoritmo;quantum;qtde_cpus' e, a partir da 2ª, uma tarefa por linha."}},
     {MsgCode::NoValidTasks,
