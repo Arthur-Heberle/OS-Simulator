@@ -314,6 +314,7 @@ void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vect
 
 bool Simulator::load(const Config& config) {
     if (findScheduler(config.algorithm) == nullptr) return false;
+    config_ = config;
     history_.clear();
     history_.push_back(initState(config));
     cursor_ = 0;
@@ -335,6 +336,69 @@ bool Simulator::stepBack() {               // voltar: só move o índice
     if (cursor_ == 0) return false;
     cursor_--;
     return true;
+}
+
+void Simulator::reset() {
+    history_.resize(1);
+    cursor_ = 0;
+}
+
+bool Simulator::jumpTo(Tick tick) {
+    if (tick < 0) return false;
+    // Para trás (ou para um instante já calculado): só move o cursor, O(1).
+    if (static_cast<std::size_t>(tick) < history_.size()) {
+        cursor_ = static_cast<std::size_t>(tick);
+        return true;
+    }
+    // Para a frente: calcula o que faltar, como vários "avançar".
+    cursor_ = history_.size() - 1;
+    while (current().tick < tick) {
+        if (!stepForward()) return false;  // terminou antes de chegar lá
+    }
+    return true;
+}
+
+std::size_t estimateSnapshotBytes(const SystemSnapshot& s) {
+    std::size_t bytes = sizeof(SystemSnapshot) + s.algorithm.capacity();
+    for (const Task& t : s.tasks) {
+        bytes += sizeof(Task) + t.jobs.capacity() * sizeof(Job) + t.id.capacity() +
+                 t.color.capacity() + t.rawEvents.capacity() + t.ignoredReason.capacity() +
+                 t.blockReason.capacity();
+    }
+    bytes += s.cpus.capacity() * sizeof(CPU) + s.readyQueue.capacity() * sizeof(int);
+    for (const Occurrence& o : s.occurrences) bytes += sizeof(Occurrence) + o.note.capacity();
+    return bytes;
+}
+
+RunSummary Simulator::runToEnd(Tick maxTicks, std::size_t maxBytes) {
+    RunSummary summary;
+    // Tamanho estimado do histórico = nº de snapshots x tamanho do snapshot atual
+    // (os snapshots de uma simulação têm tamanhos parecidos). Recalculado a cada
+    // 64 passos para não custar mais que a própria simulação.
+    std::size_t perSnapshot = estimateSnapshotBytes(current());
+    std::size_t steps = 0;
+    while (!isFinished()) {
+        if (current().tick >= maxTicks) {
+            summary.message = "Simulação interrompida no instante " + std::to_string(current().tick) +
+                              ": limite de " + std::to_string(maxTicks) +
+                              " instantes atingido. Use 'avançar' para continuar daqui.";
+            break;
+        }
+        if (history_.size() * perSnapshot > maxBytes) {
+            summary.message = "Simulação interrompida no instante " + std::to_string(current().tick) +
+                              ": o histórico ocuparia mais de " + std::to_string(maxBytes >> 20) +
+                              " MB de memória. Reduza o número de tarefas ou os períodos.";
+            break;
+        }
+        stepForward();
+        if (++steps % 64 == 0) perSnapshot = estimateSnapshotBytes(current());
+    }
+    summary.finished = isFinished();
+    summary.ticks = current().tick;
+    if (summary.finished) {
+        summary.message = "Simulação concluída no instante " + std::to_string(summary.ticks) + ".";
+    }
+    return summary;
 }
 
 // =============================================================================
