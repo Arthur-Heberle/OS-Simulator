@@ -336,7 +336,7 @@ uint64_t    tieHash(uint64_t seed, Tick now, int taskIndex);            // split
 
 **Linha do sistema:** `algoritmo;quantum;qtde_cpus`. Campos ausentes ⇒ padrão (aviso informativo). Algoritmo desconhecido ⇒ **erro** listando `schedulerNames()`. `quantum` inteiro ≥ 1. `qtde_cpus` em `1..MAX_CPUS`.
 
-**Linha de tarefa:** `id;cor;ingresso;duracao;periodo;prazo;lista_eventos` — `lista_eventos` = tudo depois do 6º `;` (D30). Obrigatórios: `id`, `ingresso`, `duracao`, `periodo`. Opcionais: `cor` (vazia ⇒ paleta automática HSL por razão áurea, evitando preto/branco e cores já usadas), `prazo` (vazio/0 ⇒ `periodo`), `lista_eventos`.
+**Linha de tarefa:** `id;cor;ingresso;duracao;periodo;prazo;lista_eventos` — `lista_eventos` = tudo depois do 6º `;` (D30). Obrigatórios: `id`, `ingresso`, `duracao`, `periodo`. Opcionais: `cor` (vazia ⇒ paleta automática: 12 cores fixas bem distintas e, depois, uma sequência que percorre as 2²⁴ cores sem repetir; nunca escolhe cor quase preta, quase branca ou já usada), `prazo` (vazio/0 ⇒ `periodo`), `lista_eventos`.
 
 **Erros fatais** (mensagem: linha, campo, valor, motivo, o que seria válido): menos de 2 linhas úteis; algoritmo desconhecido; `quantum`/`qtde_cpus` inválidos; `id` vazio ou duplicado (sem caixa); `cor` fora de `RRGGBB`; `ingresso < 0`; `duracao ≤ 0`; `periodo` não inteiro; **`periodo < 0` (Q10: erro no A; esporádica só no B)**; `prazo < 0`; número não inteiro ou > 10⁹; campos obrigatórios ausentes; nenhuma tarefa simulável (todas ignoradas ou nenhuma).
 
@@ -344,7 +344,7 @@ uint64_t    tieHash(uint64_t seed, Tick now, int taskIndex);            // split
 
 **Tabela de mensagens** (ideia do Arthur, mantida): cada mensagem tem um código (`MsgCode`) ligado à severidade (erro/aviso) e a um modelo de texto com `{}` (`MESSAGES`); `addMessage` monta o texto. Assim a severidade de cada caso fica num único lugar, fácil de mudar se o professor responder diferente. Todos os campos de uma linha são validados, para o usuário ver **todos** os erros de uma vez.
 
-**Robustez:** nunca lançar exceção para o chamador; arquivo vazio, binário, linha gigante e 100 000 tarefas devem retornar resultado sensato. Todo arquivo que obedeça ao formato **deve** carregar (A3.3.7).
+Inteiros aceitam sinal `+` (`+5`). **Robustez:** nunca lançar exceção para o chamador (`parseConfig` protege a leitura com `try/catch` e converte uma falha interna no erro `InternalError`); arquivo vazio, binário, linha gigante e 100 000 tarefas devem retornar resultado sensato. Todo arquivo que obedeça ao formato **deve** carregar (A3.3.7).
 
 ---
 
