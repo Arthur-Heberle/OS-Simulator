@@ -137,7 +137,7 @@ OS-Simulator/
 | D18 | Erros de arquivo | **Fatal** (nada é carregado; mostra arquivo, linha, campo, valor, motivo) vs **aviso** (carrega e informa). Tolera espaços, linhas vazias, CRLF/LF, BOM UTF-8, `;` final opcional, campos opcionais ausentes | A3.3.3, A3.3.6, A3.3.7 |
 | D19 | Erro de redação do enunciado | A2.3 cita "requisito 1.4"; implementar o **1.5** | O conteúdo é sobre os modos de execução |
 | D20 | Código único A+B | Uma só árvore; entrega do A = tag `entrega-A`; B continua dali. Sem `Project-A/` e `Project-B/` | O B complementa o A; duas pastas geram divergência |
-| D21 | Estado e `Simulator` | `SystemSnapshot` carrega todo o estado; `Simulator` guarda `history` + `cursor` + validação; ativação, despacho, perda de prazo, conclusão e edição são funções livres | Snapshot = cópia; retroceder = mexer no cursor; cada regra testável isolada |
+| D21 | Estado e `Simulator` | `SystemSnapshot` carrega todo o estado; `Simulator` guarda `history` + `cursor` + validação (e, para a edição, a `Config` carregada e as edições feitas em cada instante, §9); ativação, despacho, perda de prazo, conclusão e edição são funções livres | Snapshot = cópia; retroceder = mexer no cursor; cada regra testável isolada |
 | D22 | Build | CMake com `simcore` + `sim_tests` + `sim_gui` | Ver §2 |
 | D23 | Layout de entrega | `simulador/` plano, ≤ 18 arquivos, sem subpastas, includes planos | Moodle não aceita pastas nem zip; o que compila no Git é o que o professor recebe |
 | D24 | Nomes | Manter os do repositório: `Task`, `CPU`, `SystemSnapshot`, `Occurrence`; PascalCase, `.h/.cpp`; `Model.h` reúne as structs | Menos arquivos; respeita o trabalho já feito |
@@ -284,7 +284,7 @@ Nomes no código (`Simulator.cpp`): `runOneTick` (passo de execução), `finishA
 
 1. **Conclusões.** Para cada tarefa com `jobs.front().remaining == 0`: ocorrência `Termination` (x = tick); remove o job; `completed++`; libera a CPU (`cpu.taskIndex=-1`, `task.cpu=-1`; `lastCpu` permanece). Se ainda há job pendente → `Ready`; senão, se `released == LIMIT` → `Terminated` + ocorrência `TaskFinished`; senão `Dormant`. Registrar `finishTime`.
 2. **Ativações.** Para cada tarefa não `ignored` com `nextRelease == tick` e `released < LIMIT`: criar `Job{release=tick, absDeadline=tick+deadline, duration, remaining=duration}`, `released++`, `nextRelease += period`, ocorrência `Arrival` (nota "enfileirada" se já havia job). Estado: `NotArrived`/`Dormant` ⇒ `Ready`; `Ready`/`Running` ⇒ continua (backlog); `Suspended` ⇒ continua `Suspended`.
-3. **Perdas de prazo.** Para cada job com `absDeadline == tick`, `remaining > 0` e `!missed`: `missed=true`, `deadlineMisses++`, ocorrência `DeadlineMiss`.
+3. **Perdas de prazo.** Para cada job com `absDeadline <= tick` (numa execução normal é sempre `==`; o `<=` cobre um prazo reduzido por edição), `remaining > 0` e `!missed`: `missed=true`, `deadlineMisses++`, ocorrência `DeadlineMiss`.
 4. **Escalonamento.** O escalonador do `snapshot.algorithm` devolve os `PriorityGroups` dos candidatos (`isCandidate`); `chooseTasks` pega grupo a grupo até preencher `M = cpus.size()` CPUs e só sorteia quando um grupo empatado não cabe nas CPUs que sobram (§7). Se `candidatos ≤ M`, todos executam e não há sorteio.
 5. **Despacho** (`chosen` em ordem de escolha):
    a. `Running` fora de `chosen` ⇒ `Ready`, libera CPU, `preemptions++`, `Preemption`.
@@ -360,34 +360,41 @@ public:
     bool stepForward();                             // cursor++ se já existe; senão calcula; false se terminou
     bool stepBack();                                // cursor-- (O(1)); false no instante 0
     bool jumpTo(Tick tick);
-    RunSummary runToEnd(Tick maxTicks = DEFAULT_MAX_TICKS);   // A1.5.3; para por limite de ticks/memória, com mensagem
-    // RunSummary { bool finished; Tick ticks; std::string message; } — DEFAULT_MAX_TICKS = 2 000 000
+    RunSummary runToEnd(Tick maxTicks = DEFAULT_MAX_TICKS,
+                        std::size_t maxBytes = DEFAULT_MAX_HISTORY_BYTES);   // A1.5.3; para por limite, com mensagem
+    // RunSummary { bool finished; Tick ticks; std::string message; } — DEFAULT_MAX_TICKS = 2 000 000,
+    // DEFAULT_MAX_HISTORY_BYTES = 1 GiB (parâmetro para poder ser testado sem alocar 1 GiB)
     EditResult applyEdit(const Edit&);              // valida; se ok, trunca o futuro e recalcula (D15, D28)
     bool isFinished() const;                        // finished(current())
     const SystemSnapshot& current() const;          // history[cursor]
     const std::vector<SystemSnapshot>& history() const;
     size_t cursor() const;
+private:
+    std::vector<SystemSnapshot> history_;  size_t cursor_;
+    Config config_;                         // base para editar o instante 0 (não existe history[-1])
+    std::vector<std::vector<Edit>> edits_;  // edits_[k] = edições feitas no instante k, em ordem
 };
+// Regra da edição como função livre (D21): EditResult applyEditTo(SystemSnapshot&, const Edit&)
 ```
 
 - O relógio exibido é sempre `current().tick` (retroceder/avançar altera o relógio global — A1.5.2).
 - **Memória:** ~10 tarefas × 1 000 ticks ≈ poucos MB; 100 × 10 000 pode passar de 200 MB. `runToEnd` estima o uso (`sizeof(Task)·n·ticks`) e para com mensagem clara acima de ~1 GiB ou `DEFAULT_MAX_TICKS = 2 000 000`. Otimização opcional na Fase 7: snapshots-chave a cada 64 ticks + re-simulação (possível por causa do determinismo).
-- **Mecânica da edição em `k`:** `s = history[k-1]` → `executeTick` → `beginInstant` → **validar e aplicar a mutação** → `scheduleAndDispatch` → acrescentar `ManualEdit` → `history.resize(k)`; `push(s)`. Para `k == 0`: partir de `initState`. A validação ocorre numa cópia; se recusada, **nada muda** e `EditResult.message` explica o motivo.
+- **Mecânica da edição em `k`:** `s = history[k-1]` → `runOneTick` → `beginInstant` → **reaplicar `edits_[k]`** (edições já feitas neste instante, senão a 2ª apagaria a 1ª) → **validar e aplicar a nova** (registra `ManualEdit`) → `releaseActivations` + `checkDeadlines` de novo (a edição pode trazer uma ativação ou um prazo para agora; os dois são idempotentes) → `scheduleAndDispatch` → `history.resize(k)`; `push(s)`; `edits_[k] += edit`. Para `k == 0`: partir de `baseState(config_)`. A validação ocorre numa cópia; se recusada, **nada muda** (`history`, `cursor`, `edits_`) e `EditResult.message` explica o motivo. Toda edição de tarefa exige índice válido e tarefa simulada (aperiódica ignorada é recusada).
 
 | Edição | Regra de validação (mensagem de recusa explica o motivo) |
 |---|---|
 | `SetRemaining` | `1 ≤ valor ≤ duration` da ocorrência corrente; exige job pendente. Para concluir, usar `ForceFinish` |
 | `Suspend` | Só `Ready`, `Running` ou `Dormant`. `NotArrived`/`Terminated`: recusa. Libera CPU; `blockReason="manual"` |
 | `Resume` | Só `Suspended`; volta a `Ready` (tem job) ou `Dormant` |
-| `ForceFinish` / `Remove` | Qualquer estado não terminal; vira `Terminated` (índices nunca são removidos). `Terminated` não volta (recusa) |
-| `ActivateNow` | Só `Dormant`; cria job em `tick` |
-| `SetArrival` | Só `NotArrived`; novo valor ≥ `tick` |
-| `SetDuration`/`SetPeriod`/`SetDeadline` | Inteiros > 0; valem para ocorrências futuras; no prazo, o da ocorrência corrente é recalculado |
-| `SetColor` | Hex válido; aviso se repetida ou preta |
+| `ForceFinish` / `Remove` | Qualquer estado não terminal; libera a CPU, descarta ocorrências pendentes, vira `Terminated` (índices nunca são removidos). `ForceFinish` registra `TaskFinished` (nota "término forçado"); `Remove` só a `ManualEdit`. `Terminated` não volta (recusa) |
+| `ActivateNow` | Só `Dormant` e `released < 10`; cria job em `tick` (`Arrival` com nota "ativação manual") e o período passa a contar daqui (`nextRelease = tick + period`) |
+| `SetArrival` | Só `NotArrived`; novo valor ≥ `tick` (se = `tick`, a tarefa é ativada neste instante) |
+| `SetDuration`/`SetPeriod`/`SetDeadline` | Inteiros em `1..10⁹`; valem para ocorrências futuras (a corrente mantém a duração). Período: próxima ativação = última + novo período (nunca no passado). Prazo: o prazo absoluto das ocorrências pendentes ainda sem perda é recalculado; se cair no passado, a perda é registrada na hora |
+| `SetColor` | Mesmas regras do parser (`#` tolerado). **Recusa** se repetida, quase preta ou quase branca (no arquivo é aviso + troca automática; numa edição o usuário escolhe outra): A2.1 |
 | `SetAlgorithm` | Qualquer do registro; vale a partir do instante atual |
-| `SetCpuCount` | `1..MAX_CPUS`; ao reduzir, quem estava nas CPUs removidas volta a `Ready` com `Preemption` |
-| `SetQuantum`/`SetSeed` | Inteiros válidos |
-| `AddTask` | ID único; `arrival ≥ tick`; mesmas validações do parser; entra no fim de `tasks` |
+| `SetCpuCount` | `1..MAX_CPUS`; ao reduzir, quem estava nas CPUs removidas volta a `Ready` com `Preemption` (nota "CPU removida"); CPU nova começa desligada com `ticksOff = tick` (invariante 7) |
+| `SetQuantum`/`SetSeed` | Quantum em `1..10⁶`; semente ≥ 0 |
+| `AddTask` | Validada pelo **próprio parser** (arquivo montado com as tarefas atuais + a nova): ID único sem caixa, números, cor (automática se vazia), prazo padrão; `arrival ≥ tick`; entra no fim de `tasks` |
 | Estado `Running`/`Ready` direto | **Sempre recusado**: "o estado Executando é decidido pelo escalonador; suspenda a tarefa ou altere parâmetros" |
 
 Estado `Running` na GUI aparece como somente leitura; os botões oferecidos são Suspender, Retomar, Forçar término, Ativar agora, Editar parâmetros.
