@@ -232,7 +232,7 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 
 ## Fase 8 — Documentação, PDF das telas e pacote de entrega (N + G, 05–06/11)
 
-1. **PDF `telas_projeto_a.pdf`:** capturas reais das Telas 1–6 + legenda de **cada elemento visual** + **de onde vem a informação** (usar os comentários `[TELA x / Ey]`). Gerar a partir de Markdown/LibreOffice/pandoc (perguntar qual o usuário prefere). Um arquivo PDF só.
+1. **PDF `telas_projeto_a.pdf`:** capturas reais das Telas 1–6 + legenda de **cada elemento visual** + **de onde vem a informação** (usar os comentários `[TELA x / Ey]`). Incluir uma seção explicando `exemplo_rm.txt` e `exemplo_edf.txt` linha a linha: o formato do enunciado (A3.3) não tem sintaxe de comentário, então a explicação dos arquivos de configuração fica no PDF (decisão da dupla na Fase 6). Gerar a partir de Markdown/LibreOffice/pandoc (perguntar qual o usuário prefere). Um arquivo PDF só.
 2. **Conferir a entrega** (executar e colar a saída no relatório): `ls simulador | wc -l` ≤ 18; nenhuma subpasta; nenhum `.zip`; nenhum caminho absoluto; todo arquivo com cabeçalho e comentários; sem código morto nem `printf` de depuração.
 3. Build do zero em pasta limpa **seguindo só o comentário do `CMakeLists.txt`**; gerar `dist/` e repetir o teste de standalone (máquina limpa).
 4. Tag `entrega-A`; atualizar `checklist-A.md`.
