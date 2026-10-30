@@ -120,4 +120,10 @@ inline const std::map<MsgCode, MessageInfo> MESSAGES = {
 //   id;color;arrival;duration;period;deadline;event_list
 namespace parser {
     ParseResult parseConfig(const std::string& text);
+
+    // Gera o texto de um arquivo de configuração a partir de uma Config
+    // (ida e volta: parseConfig(serializeConfig(c)) reproduz c; teste P14).
+    // Usado por "Salvar configuração" na interface, depois de edições (A3.1).
+    // DECLARADA NA FASE 1, DEFINIDA NA FASE 2 (design.md §8).
+    std::string serializeConfig(const Config& config);
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <string>
 #include <vector>
 #include "Model.h"
 #include "Scheduler.h"
@@ -32,6 +33,17 @@ std::vector<int> chooseTasks(const SystemSnapshot& s, const PriorityGroups& grou
 // 6. despacho: preempção, afinidade de CPU, CPU ligada/desligada, fila de prontos.
 void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vector<int>& drawn);
 
+// Limite de instantes do "executar até o fim" (A1.5.3, design.md §9): impede que
+// uma configuração enorme trave a interface ou esgote a memória do histórico.
+constexpr Tick DEFAULT_MAX_TICKS = 2000000;
+
+// Resultado de runToEnd: até onde a simulação foi e por quê parou.
+struct RunSummary {
+    bool finished = false;  // true se todas as tarefas simuladas terminaram (D6)
+    Tick ticks = 0;         // instante alcançado (current().tick ao parar)
+    std::string message;    // motivo em português (fim, limite de ticks ou de memória) [A5]
+};
+
 // ---------------------------------------------------------------------------
 // Simulator: a única classe do núcleo. Só guarda o histórico e o cursor;
 // todo o estado da simulação está nos snapshots (D16, D21).
@@ -46,6 +58,22 @@ public:
     bool stepForward();                     // avança 1 instante (reaproveita se já existe); false no fim
     bool stepBack();                        // volta 1 instante (só move o cursor); false no instante 0
     bool isFinished() const { return finished(current()); }
+
+    // --- Declaradas na Fase 1, definidas na Fase 4 (design.md §9) ---------
+    // Volta ao instante 0, descartando todo o histórico calculado depois dele.
+    void reset();
+    // Leva o cursor ao instante 'tick' (para trás só move o cursor; para a frente
+    // calcula o que faltar). false se 'tick' < 0 ou se a simulação termina antes.
+    // O relógio exibido acompanha o cursor [A1.5.2].
+    bool jumpTo(Tick tick);
+    // Modo "execução completa" [A1.5.3]: avança até o fim ou até 'maxTicks'
+    // (ou o limite de memória estimada), sem nunca travar.
+    RunSummary runToEnd(Tick maxTicks = DEFAULT_MAX_TICKS);
+    // Edição manual no instante do cursor [A1.5.2, A3.4]: valida numa cópia; se
+    // aceita, aplica antes do escalonador (D28), registra ManualEdit, descarta o
+    // futuro e recalcula o instante (D15). Se recusada, nada muda e a mensagem
+    // explica o motivo.
+    EditResult applyEdit(const Edit& edit);
 
     const SystemSnapshot& current() const { return history_[cursor_]; }
     const std::vector<SystemSnapshot>& history() const { return history_; }
