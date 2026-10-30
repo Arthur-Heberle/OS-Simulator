@@ -22,7 +22,7 @@ git switch -c fase-2-parser                  # 2. cria a branch da fase
 # ... commits pequenos ...
 git push -u origin fase-2-parser             # 3. publica (backup + o colega acompanha)
 git fetch && git merge origin/main           # 4. traz a main para a SUA branch (repita sempre que a main mudar)
-cmake --build build && build\sim_tests.exe   # 5. compila sem warnings e testes verdes
+cmake --build build && build\sim_tests.exe   # 5. compila sem warnings e testes verdes (completo, sem --rapido)
 ```
 
 6. **Integrar:** quem fez a branch revisa e integra **sozinho**, sem esperar aprovação do colega (a `main` não tem proteção de branch, então o autor pode fazer o merge do próprio PR). O PR é opcional e serve de registro: `gh pr create --base main --fill` e, depois de conferir o diff, `gh pr merge --merge --delete-branch`. Avise o colega no grupo quando integrar, para ele ler as mudanças depois (a nota é individual: os dois precisam entender tudo). Sem PR, o merge local também serve:

@@ -12,12 +12,12 @@ Cole no Claude Code, uma fase por vez:
 
 **Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); cada um integra a própria branch na `main` (PR opcional, sem aprovação obrigatória) e avisa o outro para ler as mudanças; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
 
-## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 2)
+## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 3)
 
 - **Fase 0:** concluída e integrada.
 - **Fase 1: integrada na `main`.** `Model.h` reúne `Task`, `Job`, `CPU`, `Occurrence`, `SystemSnapshot`, `Config`, `ParseResult` (com `ok()`), `Edit`/`EditKind`/`EditResult`, `MAX_CPUS` e as ajudas `currentJob`, `isCandidate`, `naturalIdLess` (por blocos); `Task.h`, `CPU.h`, `SystemSnapshot.h` e `Task.cpp` saíram. Declarados sem definição: `parser::serializeConfig` (Fase 2) e `Simulator::reset/jumpTo/runToEnd/applyEdit` + `RunSummary`/`DEFAULT_MAX_TICKS` (Fase 4). Em `tests.cpp`: `serializeSnapshot`, `checkInvariants` (invariantes 1, 2, 3, 4, 5, 7, 8), `taskOn`/`countOcc`/`occTicks`. Fixture `demoHistoryG1()` (instantes 0–12, montado à mão) em `Simulator.cpp`, marcado TEMPORÁRIO (remover na Fase 7). `sim_tests`: 71 checks.
-- **Fase 2: concluída na branch `fase-2-parser`** (aguardando merge). `parseConfig` conforme §8, com cabeçalhos RG6, garantia de não lançar exceção, sinal `+` e paleta automática sem preto/branco; `serializeConfig` (ida e volta); P1–P14 e robustez no `sim_tests` (192 checks; 100 000 tarefas em ~0,6 s).
-- **Fase 3 (parcial):** registro, `tieHash`, RM/EDF com grupos de empate, `initState`, `makeNext`, `runOneTick` e `chooseTasks` prontos. Falta: `finishActivations`, `releaseActivations`, `checkDeadlines`, `dispatch` (regras nos comentários do `Simulator.cpp`) e todos os testes (G1–G4, FIFO, fuzz). O verificador de invariantes e os helpers de consulta já existem (Fase 1); o G1 do motor pode ser conferido com o mesmo roteiro do teste do `demoHistoryG1`.
+- **Fase 2: integrada na `main`.** `parseConfig` conforme §8 (exceções contidas, sinal `+`, paleta sem preto/branco, troca de cor quase preta/quase branca), `serializeConfig`, P1–P14 e robustez.
+- **Fase 3: concluída na branch `fase-3-motor`** (aguardando merge). Motor completo na ordem do §6 (`finishActivations`, `releaseActivations`, `checkDeadlines`, `chooseTasks`, `dispatch` com afinidade em duas passadas); `orderAndGroup` público (algoritmo novo = função-chave). Testes: G1 (idêntico ao `demoHistoryG1`), G2 RM/EDF, G3, G4, G4b (critério 1 isolado), FIFO, invariantes 1–9 e fuzz de 10 000 sistemas (~2,5 M snapshots). `sim_tests`: 268 checks; `--grid` imprime as grades.
 - **Fase 4:** a API já está declarada em `Simulator.h` (Fase 1); falta definir e testar.
 
 ## 1. Calendário (hoje = 23/10/2026; defesa do A = 09/11/2026)
@@ -135,14 +135,14 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 
 **Tarefas**
 1. `Scheduler.cpp`: registro (`registerScheduler`, `findScheduler`, `schedulerNames`), `tieHash` (splitmix64), `compareTasks`/`orderAndGroup` (A4.3 critérios 1→4, grupos de empate), **RM** (chave = `period`) e **EDF** (chave = `jobs.front().absDeadline`); `chooseTasks` no `Simulator` faz o critério 5 (sorteio só quando o grupo não cabe). *(Já adiantado na `main`: conferir e completar.)*
-2. `Simulator.cpp`, como **funções livres sobre `SystemSnapshot&`** (sem I/O, sem estado global): `initState(Config)`, `executeTick`, `beginInstant` (conclusões → ativações → perdas de prazo), `scheduleAndDispatch` (candidatos; atalho `candidatos ≤ M`; `M` chamadas ao escalonador; despacho com afinidade; CPU on/off; `readyQueue`), `makeNext`, `finished`. Ordem **exatamente** como em `design.md` §6.
+2. `Simulator.cpp`, como **funções livres sobre `SystemSnapshot&`** (sem I/O, sem estado global): `initState(Config)`, `runOneTick`, `finishActivations` → `releaseActivations` → `checkDeadlines`, escalonador + `chooseTasks`, `dispatch` (despacho com afinidade; CPU on/off; `readyQueue`), `makeNext`, `finished`. Ordem **exatamente** como em `design.md` §6.
 3. Em `tests.cpp`: `printGrid`, `runConfig`, helpers e os testes **G1, G2 (RM e EDF), G3, G4**, o **teste FIFO** (A4.2), as **invariantes** (§4) e o **fuzz** (§5). Gerar o histórico completo até `finished` (sem a classe `Simulator` ainda: usar `makeNext` em laço).
 4. Se algum resultado dourado divergir do motor, **não ajustar o teste**: reexaminar o cálculo e relatar.
 
 **Critérios de aceitação**
-- [ ] G1–G4, FIFO, invariantes 1–9 e fuzz de 10 000 sistemas verdes.
-- [ ] `printGrid` de G1 e G2 anexado ao relatório.
-- [ ] Núcleo sem nenhum include de Qt; sem warnings.
+- [x] G1–G4 (e G4b), FIFO, invariantes 1–9 e fuzz de 10 000 sistemas verdes.
+- [x] `printGrid` de G1 e G2 anexado ao relatório (`sim_tests --grid`).
+- [x] Núcleo sem nenhum include de Qt; sem warnings.
 
 **Commit:** `Scheduler (RM, EDF, registro) e motor de ticks com testes dourados`.
 

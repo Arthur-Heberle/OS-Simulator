@@ -1,11 +1,11 @@
+// =============================================================================
+// Scheduler.cpp — RM, EDF, critérios de desempate (A4.3), registro de
+// algoritmos (A4.2) e o hash do sorteio (D14). Ver o cabeçalho de Scheduler.h.
+// =============================================================================
 #include "Scheduler.h"
 #include <algorithm>
 #include <cctype>
 #include <map>
-
-// Priority key of a task for one algorithm: the smaller, the higher the priority.
-// This is the ONLY thing that changes between algorithms. [A4.2]
-using KeyFn = Tick (*)(const Task&);
 
 static Tick rmKey (const Task& t) { return t.period; }                     // RM: fixed priority
 static Tick edfKey(const Task& t) { return t.jobs.front().absDeadline; }   // EDF: dynamic priority (prazo absoluto da ocorrência corrente)
@@ -49,7 +49,7 @@ static std::vector<int> candidates(const SystemSnapshot& s) {
 }
 
 // Sorts the candidates by priority and puts the tied ones in the same group.
-static PriorityGroups orderAndGroup(const SystemSnapshot& s, KeyFn key) {
+PriorityGroups orderAndGroup(const SystemSnapshot& s, KeyFn key) {
     std::vector<int> order = candidates(s);
 
     // stable_sort: tied tasks keep their original order, so the result is always the same

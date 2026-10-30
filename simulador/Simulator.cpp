@@ -1,5 +1,10 @@
+// =============================================================================
+// Simulator.cpp — Implementação do motor (design.md §6) e da classe Simulator.
+// Ver o cabeçalho de Simulator.h.
+// =============================================================================
 #include "Simulator.h"
 #include <algorithm>
+#include <string>
 
 // ---------------------------------------------------------------------------
 // Linha do tempo (D3): o tick t é o intervalo [t, t+1). history[k] é o estado
@@ -89,24 +94,81 @@ void runOneTick(SystemSnapshot& s) {
     }
 }
 
-// TODO (Fase 3): para cada tarefa com jobs.front().remaining == 0: ocorrência
-// Termination; remove o job; completed++; libera a CPU (lastCpu permanece);
-// ainda há job => Ready; senão released == limite => Terminated + TaskFinished;
-// senão Dormant. Registrar finishTime. (design.md §6, passo 1)
-void finishActivations(SystemSnapshot& /*s*/) {
+// Pequeno atalho para registrar uma ocorrência no instante atual (A2.2: o Gantt
+// desenha cada uma em x = s.tick).
+static void addOccurrence(SystemSnapshot& s, OccurrenceType type, int taskIndex, int cpuIndex,
+                          const std::string& note = "") {
+    s.occurrences.push_back(Occurrence{type, taskIndex, cpuIndex, note});
 }
 
-// TODO (Fase 3): tarefa não ignorada com nextRelease == tick e released < limite:
-// cria Job{tick, tick + deadline, duration, duration}; released++;
-// nextRelease += period; ocorrência Arrival (nota "enfileirada" se já havia job).
-// NotArrived/Dormant => Ready; Ready/Running/Suspended continuam. (§6, passo 2)
-void releaseActivations(SystemSnapshot& /*s*/) {
+// Passo 1 do instante (design.md §6): conclusões. Uma ocorrência cujo tempo
+// restante chegou a 0 terminou exatamente agora (no fim do tick anterior).
+// Vem ANTES das perdas de prazo: quem termina no próprio prazo não perde (D9).
+void finishActivations(SystemSnapshot& s) {
+    for (int i = 0; i < static_cast<int>(s.tasks.size()); ++i) {
+        Task& t = s.tasks[i];
+        if (t.jobs.empty() || t.jobs.front().remaining > 0) continue;
+
+        // Termination = fim de UMA ocorrência (resposta Q5), com a CPU em que rodou.
+        addOccurrence(s, OccurrenceType::Termination, i, t.cpu);
+        t.jobs.erase(t.jobs.begin());
+        t.completed++;
+        if (t.cpu >= 0) {               // libera a CPU; lastCpu guarda a afinidade (D10)
+            s.cpus[t.cpu].taskIndex = -1;
+            t.lastCpu = t.cpu;
+            t.cpu = -1;
+        }
+
+        if (!t.jobs.empty()) {
+            t.state = TaskState::Ready;     // havia ocorrência enfileirada (D5): volta a concorrer
+        } else if (t.released >= PERIODIC_ACTIVATION_LIMIT) {
+            t.state = TaskState::Terminated;  // concluiu a 10ª ocorrência [A4.4] (D6)
+            t.finishTime = s.tick;
+            addOccurrence(s, OccurrenceType::TaskFinished, i, -1);
+        } else {
+            t.state = TaskState::Dormant;   // espera a próxima ativação, sem concorrer (D1)
+        }
+    }
 }
 
-// TODO (Fase 3): job com absDeadline == tick, remaining > 0 e !missed:
-// missed = true; deadlineMisses++; ocorrência DeadlineMiss. A tarefa continua
-// executando [A3.3]. (§6, passo 3)
-void checkDeadlines(SystemSnapshot& /*s*/) {
+// Passo 2: ativações. Cada período cria uma ocorrência (Job) nova da tarefa
+// periódica, com prazo absoluto = ativação + prazo relativo [A3.3]. Se a
+// anterior ainda não terminou (perdeu o prazo), a nova é ENFILEIRADA, não
+// descartada (D5): a tarefa continua executando até cumprir tudo.
+void releaseActivations(SystemSnapshot& s) {
+    for (int i = 0; i < static_cast<int>(s.tasks.size()); ++i) {
+        Task& t = s.tasks[i];
+        if (t.ignored || t.state == TaskState::Terminated) continue;  // fora do A (D7) ou encerrada
+        if (t.released >= PERIODIC_ACTIVATION_LIMIT || t.nextRelease != s.tick) continue;
+
+        const bool queued = !t.jobs.empty();
+        t.jobs.push_back(Job{s.tick, s.tick + t.deadline, t.duration, t.duration, false});
+        t.released++;
+        t.nextRelease += t.period;
+        // Arrival = entrada na fila de prontos, a CADA ativação (resposta Q5) [A2.2].
+        addOccurrence(s, OccurrenceType::Arrival, i, -1, queued ? "enfileirada" : "");
+
+        // Ready/Running continuam (só ganham trabalho); Suspended continua impedida.
+        if (t.state == TaskState::NotArrived || t.state == TaskState::Dormant) {
+            t.state = TaskState::Ready;
+        }
+    }
+}
+
+// Passo 3: perdas de prazo. Chegou o prazo absoluto e ainda falta executar:
+// é um erro que o Gantt mostra [A3.3]. Registrado UMA vez por ocorrência
+// (D9), e a tarefa continua executando até terminar (A3.3).
+void checkDeadlines(SystemSnapshot& s) {
+    for (int i = 0; i < static_cast<int>(s.tasks.size()); ++i) {
+        Task& t = s.tasks[i];
+        for (Job& job : t.jobs) {
+            if (job.absDeadline == s.tick && job.remaining > 0 && !job.missed) {
+                job.missed = true;
+                t.deadlineMisses++;
+                addOccurrence(s, OccurrenceType::DeadlineMiss, i, t.cpu);
+            }
+        }
+    }
 }
 
 std::vector<int> chooseTasks(const SystemSnapshot& s, const PriorityGroups& groups,
@@ -142,15 +204,93 @@ std::vector<int> chooseTasks(const SystemSnapshot& s, const PriorityGroups& grou
     return chosen;
 }
 
-// TODO (Fase 3): (a) Running fora de 'chosen' => Ready, libera CPU,
-// preemptions++, Preemption; (b) escolhida já Running fica na mesma CPU;
-// (c) escolhida nova vai para lastCpu se livre, senão a de menor índice:
-// Running, Dispatch, Migration se trocou de CPU, firstStart, quantumUsed = 0,
-// TieBreakDraw se está em 'drawn'; (d) CPU sem tarefa => on = false (+ CpuOff),
-// CPU com tarefa e desligada => on = true (+ CpuOn); readyQueue = Ready
-// ordenadas por (jobs.front().release, índice). (§6, passos 5 e 6)
-void dispatch(SystemSnapshot& /*s*/, const std::vector<int>& /*chosen*/,
-              const std::vector<int>& /*drawn*/) {
+// Passos 5 e 6: despacho (design.md §6). 'chosen' são as tarefas que executam
+// em [tick, tick+1); 'drawn' as que foram escolhidas por sorteio [A4.3].
+void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vector<int>& drawn) {
+    const int taskCount = static_cast<int>(s.tasks.size());
+    const int cpuCount = static_cast<int>(s.cpus.size());
+    std::vector<bool> isChosen(static_cast<std::size_t>(taskCount), false);
+    for (int i : chosen) isChosen[static_cast<std::size_t>(i)] = true;
+
+    // (a) Preempção: estava executando e não foi escolhida (uma mais prioritária
+    // ocupou a vaga). Volta para a fila de prontos e libera a CPU.
+    for (int i = 0; i < taskCount; ++i) {
+        Task& t = s.tasks[i];
+        if (t.state != TaskState::Running || isChosen[static_cast<std::size_t>(i)]) continue;
+        addOccurrence(s, OccurrenceType::Preemption, i, t.cpu);
+        s.cpus[t.cpu].taskIndex = -1;
+        t.lastCpu = t.cpu;
+        t.cpu = -1;
+        t.state = TaskState::Ready;
+        t.preemptions++;
+    }
+
+    // (b) Escolhida que já executa fica na MESMA CPU (D10: sem troca de
+    // contexto nem migração). (c) Escolhida nova vai para uma CPU livre.
+    // Afinidade (D10) em duas passadas: primeiro quem pode voltar para a
+    // última CPU usada (se ela estiver livre); depois as demais, na CPU livre
+    // de menor índice. Assim uma tarefa sem afinidade não "rouba" a CPU de
+    // outra e provoca uma migração desnecessária.
+    auto start = [&](int i, int c) {
+        Task& t = s.tasks[i];
+        CPU& cpu = s.cpus[c];
+        cpu.taskIndex = i;
+        cpu.quantumUsed = 0;
+        t.cpu = c;
+        t.state = TaskState::Running;
+        if (t.firstStart < 0) t.firstStart = s.tick;
+        addOccurrence(s, OccurrenceType::Dispatch, i, c);
+        if (t.lastCpu != -1 && t.lastCpu != c) {
+            addOccurrence(s, OccurrenceType::Migration, i, c);
+            t.migrations++;
+        }
+        // Ícone de sorteio no momento em que a escolhida (re)começa [A4.3].
+        if (std::find(drawn.begin(), drawn.end(), i) != drawn.end()) {
+            addOccurrence(s, OccurrenceType::TieBreakDraw, i, c);
+        }
+    };
+    std::vector<int> waiting;  // escolhidas novas sem CPU de afinidade livre
+    for (int i : chosen) {
+        Task& t = s.tasks[i];
+        if (t.state == TaskState::Running) continue;  // (b)
+        if (t.lastCpu >= 0 && t.lastCpu < cpuCount && s.cpus[t.lastCpu].taskIndex == -1) {
+            start(i, t.lastCpu);
+        } else {
+            waiting.push_back(i);
+        }
+    }
+    for (int i : waiting) {
+        int c = 0;
+        while (c < cpuCount && s.cpus[c].taskIndex != -1) ++c;
+        if (c == cpuCount) break;  // não acontece: chooseTasks escolhe no máximo M tarefas
+        start(i, c);
+    }
+
+    // (d) CPU sem tarefa é desligada; CPU desligada que recebeu tarefa é
+    // religada [A1.2]. Só as transições geram ocorrência (o Gantt mostra o período).
+    for (int c = 0; c < cpuCount; ++c) {
+        CPU& cpu = s.cpus[c];
+        const bool busy = cpu.taskIndex != -1;
+        if (!busy && cpu.on) {
+            cpu.on = false;
+            addOccurrence(s, OccurrenceType::CpuOff, -1, c);
+        } else if (busy && !cpu.on) {
+            cpu.on = true;
+            addOccurrence(s, OccurrenceType::CpuOn, -1, c);
+        }
+    }
+
+    // Passo 6: fila global de prontos [A1.2], por ordem de chegada da
+    // ocorrência corrente (e índice, para desempatar sempre igual).
+    s.readyQueue.clear();
+    for (int i = 0; i < taskCount; ++i) {
+        if (s.tasks[i].state == TaskState::Ready) s.readyQueue.push_back(i);
+    }
+    std::sort(s.readyQueue.begin(), s.readyQueue.end(), [&s](int a, int b) {
+        Tick ra = s.tasks[a].jobs.front().release;
+        Tick rb = s.tasks[b].jobs.front().release;
+        return ra != rb ? ra < rb : a < b;
+    });
 }
 
 // ---------------------------------------------------------------------------

@@ -7,7 +7,10 @@
 //     de invariantes de histórico, helpers de consulta), naturalIdLess e o
 //     histórico de demonstração de G1 (demoHistoryG1).
 //   - Fase 2: parser P1–P14 e robustez (docs/testes.md §3).
-//   - Próximas fases: cenários dourados G1–G6, fuzz (docs/testes.md).
+//   - Fase 3: motor (G1–G4, FIFO, invariantes 1–9, fuzz). 'sim_tests --rapido' roda o fuzz
+//     com 500 sistemas (dia a dia); 'sim_tests --grid'
+//     imprime as grades de G1, G2 e G3.
+//   - Fase 4: G5, G6 e invariante 10.
 //
 // Por quê assim:
 //   - Sem GoogleTest ou outra biblioteca: a macro CHECK abaixo basta e evita
@@ -756,8 +759,319 @@ static void testParserRobustness() {
     std::cout << "  (parser: 100 000 tarefas em " << ms << " ms)\n";
 }
 
+// -----------------------------------------------------------------------------
+// Fase 3: motor de ticks (docs/testes.md §2 G1–G4, §4, §5, §6).
+// -----------------------------------------------------------------------------
+
+// Executa a configuração do instante 0 até o fim com makeNext em laço (a
+// classe Simulator com runToEnd é da Fase 4). 'maxTicks' é só uma trava de
+// segurança para um teste com defeito não rodar para sempre.
+static std::vector<SystemSnapshot> runConfig(const std::string& text, uint64_t seed = 1,
+                                             Tick maxTicks = 100000) {
+    std::vector<SystemSnapshot> history;
+    ParseResult parsed = parser::parseConfig(text);
+    if (!parsed.ok()) {
+        ++g_checks;
+        ++g_fails;
+        std::cerr << "  configuração de teste inválida:\n" << text;
+        for (const std::string& e : parsed.errors) std::cerr << "  " << e << "\n";
+        return history;
+    }
+    parsed.config.seed = seed;
+    history.push_back(initState(parsed.config));
+    while (!finished(history.back()) && history.back().tick < maxTicks) {
+        history.push_back(makeNext(history.back()));
+    }
+    return history;
+}
+
+// Imprime uma linha por instante: quem ocupa cada CPU em [k, k+1) e as
+// ocorrências de x = k (docs/testes.md §1). Usada para depurar e para o
+// relatório da fase: 'sim_tests --grid'.
+static void printGrid(const std::vector<SystemSnapshot>& history, Tick maxTicks) {
+    for (const SystemSnapshot& s : history) {
+        if (s.tick >= maxTicks) break;
+        std::string line = std::to_string(s.tick);
+        line.insert(0, 4 - std::min<std::size_t>(4, line.size()), ' ');
+        line += " |";
+        for (int c = 0; c < static_cast<int>(s.cpus.size()); ++c) {
+            std::string id = taskOn(history, s.tick, c);
+            line += " " + std::string(id.size() < 3 ? 3 - id.size() : 0, ' ') + id;
+        }
+        line += " |";
+        for (const Occurrence& o : s.occurrences) {
+            line += " " + std::string(occurrenceName(o.type));
+            if (o.taskIndex >= 0) line += "(" + s.tasks[o.taskIndex].id + ")";
+            else if (o.cpuIndex >= 0) line += "(CPU" + std::to_string(o.cpuIndex + 1) + ")";
+            if (!o.note.empty()) line += "[" + o.note + "]";
+        }
+        std::cout << line << "\n";
+    }
+}
+
+// Nota da ocorrência 'type' da tarefa 'taskIndex' no instante 'tick' ("?" se não houver).
+static std::string occNote(const std::vector<SystemSnapshot>& history, Tick tick,
+                           OccurrenceType type, int taskIndex) {
+    for (const Occurrence& o : history[static_cast<std::size_t>(tick)].occurrences) {
+        if (o.type == type && o.taskIndex == taskIndex) return o.note;
+    }
+    return "?";
+}
+
+// Grade da CPU 'cpu' nos ticks [0, n) como "1 1 2 - ..." (compara com testes.md).
+static std::string gridOf(const std::vector<SystemSnapshot>& history, int cpu, Tick n) {
+    std::string out;
+    for (Tick k = 0; k < n && k < static_cast<Tick>(history.size()); ++k) {
+        if (!out.empty()) out += ' ';
+        out += taskOn(history, k, cpu);
+    }
+    return out;
+}
+
+// Ocorrências do tipo 'type' (da tarefa 'taskIndex', -1 = qualquer) em [from, to).
+static int countOccIn(const std::vector<SystemSnapshot>& history, OccurrenceType type,
+                      int taskIndex, Tick from, Tick to) {
+    int count = 0;
+    for (Tick k : occTicks(history, type, taskIndex)) {
+        if (k >= from && k < to) ++count;
+    }
+    return count;
+}
+
+// Invariante 6 (testes.md §4): ao final, cada tarefa simulada liberou e
+// concluiu exatamente 10 ocorrências, com 10 Arrival, 10 Termination,
+// 1 TaskFinished e runTicks = 10 · duração [A4.4] (D6).
+static std::vector<std::string> checkFinalState(const std::vector<SystemSnapshot>& history) {
+    std::vector<std::string> errors;
+    if (history.empty()) return {"histórico vazio"};
+    const SystemSnapshot& last = history.back();
+    if (!finished(last)) errors.push_back("a simulação não terminou (instante " + std::to_string(last.tick) + ")");
+    for (int i = 0; i < static_cast<int>(last.tasks.size()); ++i) {
+        const Task& t = last.tasks[i];
+        if (t.ignored) continue;
+        const int L = PERIODIC_ACTIVATION_LIMIT;
+        if (t.released != L || t.completed != L ||
+            countOcc(history, OccurrenceType::Arrival, i) != L ||
+            countOcc(history, OccurrenceType::Termination, i) != L ||
+            countOcc(history, OccurrenceType::TaskFinished, i) != 1 ||
+            t.runTicks != L * t.duration || t.state != TaskState::Terminated || !t.jobs.empty()) {
+            errors.push_back("invariante 6: estado final errado da tarefa " + t.id);
+        }
+    }
+    return errors;
+}
+
+// Mesmo histórico, snapshot a snapshot (serialização completa)? Invariante 9.
+static bool sameHistory(const std::vector<SystemSnapshot>& a, const std::vector<SystemSnapshot>& b) {
+    if (a.size() != b.size()) return false;
+    for (std::size_t k = 0; k < a.size(); ++k) {
+        if (serializeSnapshot(a[k]) != serializeSnapshot(b[k])) return false;
+    }
+    return true;
+}
+
+static const std::string G1_TEXT = "RM;2;1\n1;FF0000;0;1;4;4\n2;0000FF;0;2;6;6\n";
+static const std::string G2_TASKS = "1;FF0000;0;2;5;5\n2;0000FF;0;4;7;7\n";
+static const std::string G3_TEXT = "EDF;2;2\n1;FF0000;0;2;4;4\n2;00FF00;0;2;4;4\n3;0000FF;0;2;4;4\n";
+static const std::string G4_TEXT = "EDF;2;1\n1;FF0000;0;3;10;10\n2;0000FF;1;3;10;9\n";
+
+// G1 — RM, 1 CPU, folgado; também valida CPU desligada.
+static void testGoldenG1() {
+    const std::vector<SystemSnapshot> h = runConfig(G1_TEXT);
+    const int T1 = 0, T2 = 1;
+    CHECK_EQ(gridOf(h, 0, 12), std::string("1 2 2 - 1 - 2 2 1 - - -"));
+    CHECK_EQ(countOcc(h, OccurrenceType::DeadlineMiss, -1), 0);
+    CHECK_EQ(countOcc(h, OccurrenceType::Preemption, -1), 0);
+    CHECK(occTicks(h, OccurrenceType::Termination, T1).size() >= 3);
+    CHECK(occTicks(h, OccurrenceType::Termination, T2).size() >= 2);
+    CHECK(occTicks(h, OccurrenceType::Termination, T1)[2] == 9);
+    CHECK(occTicks(h, OccurrenceType::Termination, T2)[1] == 8);
+    CHECK_EQ(h[12].cpus[0].ticksOff, 5);  // CPU1 desligada em 3, 5, 9, 10 e 11
+    CHECK(noViolations(checkInvariants(h)));
+    CHECK(noViolations(checkFinalState(h)));
+
+    // O motor reproduz EXATAMENTE o histórico montado à mão na Fase 1
+    // (todos os campos, todas as ocorrências, na mesma ordem).
+    const std::vector<SystemSnapshot> demo = demoHistoryG1();
+    bool same = h.size() >= demo.size();
+    for (std::size_t k = 0; same && k < demo.size(); ++k) {
+        same = serializeSnapshot(h[k]) == serializeSnapshot(demo[k]);
+        if (!same) std::cerr << "  G1 diverge do demoHistoryG1 no instante " << k << "\n";
+    }
+    CHECK(same);
+}
+
+// G2 — RM x EDF, 1 CPU, utilização alta: o RM perde prazo, o EDF não.
+static void testGoldenG2() {
+    const int T1 = 0, T2 = 1;
+    const std::vector<SystemSnapshot> rm = runConfig("RM;2;1\n" + G2_TASKS);
+    CHECK_EQ(gridOf(rm, 0, 14), std::string("1 1 2 2 2 1 1 2 2 2 1 1 2 2"));
+    CHECK(occTicks(rm, OccurrenceType::Preemption, T2).front() == 5);   // T1 preempta T2 em 5
+    CHECK(occTicks(rm, OccurrenceType::DeadlineMiss, T2).front() == 7); // prazo absoluto 7, falta 1
+    CHECK(occTicks(rm, OccurrenceType::Termination, T2).front() == 8);  // 1ª ocorrência de T2 termina em 8
+    CHECK_EQ(occNote(rm, 7, OccurrenceType::Arrival, T2), std::string("enfileirada"));
+    CHECK_EQ(rm[7].tasks[T2].jobs.size(), 2u);                         // 2ª ocorrência na fila (D5)
+    CHECK_EQ(countOccIn(rm, OccurrenceType::DeadlineMiss, T1, 0, 14), 0);
+    CHECK(occTicks(rm, OccurrenceType::Termination, T2)[1] == 14);      // termina no prazo: não perde
+    CHECK_EQ(countOccIn(rm, OccurrenceType::DeadlineMiss, T2, 14, 15), 0);
+    CHECK(noViolations(checkInvariants(rm)));
+    CHECK(noViolations(checkFinalState(rm)));
+
+    const std::vector<SystemSnapshot> edf = runConfig("EDF;2;1\n" + G2_TASKS);
+    CHECK_EQ(gridOf(edf, 0, 14), std::string("1 1 2 2 2 2 1 1 2 2 2 2 1 1"));
+    CHECK_EQ(countOccIn(edf, OccurrenceType::DeadlineMiss, -1, 0, 14), 0);
+    CHECK_EQ(countOccIn(edf, OccurrenceType::Preemption, -1, 0, 14), 0);
+    CHECK(occTicks(edf, OccurrenceType::Termination, T2)[0] == 6);
+    CHECK(occTicks(edf, OccurrenceType::Termination, T1)[1] == 8);
+    CHECK(occTicks(edf, OccurrenceType::Termination, T2)[1] == 12);
+    CHECK(noViolations(checkInvariants(edf)));
+    CHECK(noViolations(checkFinalState(edf)));
+}
+
+// G3 — EDF, 2 CPUs, empate total: sorteio determinístico (A4.3, D14).
+static void testGoldenG3() {
+    for (uint64_t seed : {1ULL, 2ULL}) {
+        const std::vector<SystemSnapshot> h = runConfig(G3_TEXT, seed);
+        int running0 = 0;
+        for (const Task& t : h[0].tasks) running0 += t.state == TaskState::Running ? 1 : 0;
+        CHECK_EQ(running0, 2);                                            // uma em cada CPU
+        CHECK_EQ(countOccIn(h, OccurrenceType::TieBreakDraw, -1, 0, 1), 2); // uma por escolhida
+        // Ticks 2 e 3: só a que não foi sorteada executa, na CPU1; CPU2 desligada.
+        int third = -1;
+        for (int i = 0; i < 3; ++i) {
+            if (h[0].tasks[i].state == TaskState::Ready) third = i;
+        }
+        CHECK(third >= 0);
+        CHECK_EQ(h[2].cpus[0].taskIndex, third);
+        CHECK_EQ(h[3].cpus[0].taskIndex, third);
+        CHECK_EQ(taskOn(h, 2, 1), std::string("-"));
+        CHECK(std::find(occTicks(h, OccurrenceType::CpuOff, -1).begin(),
+                        occTicks(h, OccurrenceType::CpuOff, -1).end(), 2) != occTicks(h, OccurrenceType::CpuOff, -1).end());
+        CHECK_EQ(countOccIn(h, OccurrenceType::TieBreakDraw, -1, 2, 3), 0); // um só candidato
+        CHECK_EQ(countOccIn(h, OccurrenceType::TieBreakDraw, -1, 4, 5), 2); // em 4, novo sorteio
+        CHECK_EQ(h[8].cpus[1].ticksOff, 4);                                 // CPU2 em [0,8)
+        CHECK(noViolations(checkInvariants(h)));
+        CHECK(noViolations(checkFinalState(h)));
+        CHECK(sameHistory(h, runConfig(G3_TEXT, seed)));                    // determinismo (inv. 9)
+    }
+}
+
+// G4 — desempate (1): quem está executando continua (A4.3).
+static void testGoldenG4() {
+    const std::vector<SystemSnapshot> h = runConfig(G4_TEXT);
+    CHECK_EQ(gridOf(h, 0, 10), std::string("1 1 1 2 2 2 - - - -"));
+    CHECK_EQ(countOccIn(h, OccurrenceType::Preemption, -1, 0, 10), 0);
+    CHECK_EQ(countOcc(h, OccurrenceType::TieBreakDraw, -1), 0);
+    CHECK_EQ(h.back().tasks[1].firstStart, 3);
+    CHECK(noViolations(checkInvariants(h)));
+    CHECK(noViolations(checkFinalState(h)));
+
+    // G4b — isola o critério (1). No G4 acima, T1 também venceria pelo
+    // critério (3) (chegou antes). Aqui (RM, 1 CPU) as duas têm período 10
+    // (chave empatada); em 2, T2 chega com prazo absoluto 7 < 10 de T1, então
+    // o critério (2) escolheria T2, mas o (1) mantém T1, que já executa.
+    const std::vector<SystemSnapshot> b = runConfig("RM;2;1\n1;FF0000;0;4;10;10\n2;00FF00;2;2;10;5\n");
+    CHECK_EQ(gridOf(b, 0, 7), std::string("1 1 1 1 2 2 -"));
+    CHECK_EQ(countOccIn(b, OccurrenceType::Preemption, -1, 0, 10), 0);
+    CHECK_EQ(countOccIn(b, OccurrenceType::DeadlineMiss, -1, 0, 10), 0);  // T2 termina em 6 < 7
+    CHECK(noViolations(checkInvariants(b)));
+}
+
+// Extensibilidade (A4.2, testes.md §6): um algoritmo novo registrado de
+// FORA do núcleo, sem nenhuma alteração no Simulator nem no parser.
+static Tick fifoKey(const Task& t) { return t.jobs.front().release; }  // ocorrência mais antiga primeiro
+static PriorityGroups scheduleFIFO(const SystemSnapshot& s) { return orderAndGroup(s, fifoKey); }
+
+static void testFifoExtensibility() {
+    registerScheduler("FIFO", scheduleFIFO);
+    const std::string text = "fifo;2;1\n1;FF0000;0;2;5;5\n2;0000FF;1;1;3;3\n";
+    const ParseResult parsed = parser::parseConfig(text);
+    CHECK(parsed.ok());                                       // (a) o parser aceita o nome novo
+    CHECK_EQ(parsed.config.algorithm, std::string("FIFO"));
+    const std::vector<SystemSnapshot> h = runConfig(text);    // (b) o motor executa sem mudança
+    // Em 1, T2 chega com período menor (RM a escolheria), mas FIFO mantém T1.
+    CHECK_EQ(gridOf(h, 0, 3), std::string("1 1 2"));
+    CHECK(noViolations(checkInvariants(h)));
+    CHECK(noViolations(checkFinalState(h)));
+}
+
+// Gerador de números do fuzz: splitmix64 com estado próprio do teste (o
+// núcleo não usa nada parecido; lá o sorteio é o tieHash sem estado). Semente
+// fixa => o fuzz é reproduzível: uma falha sempre volta igual.
+static uint64_t fuzzNext(uint64_t& state) {
+    uint64_t z = (state += 0x9E3779B97F4A7C15ULL);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
+}
+
+// Inteiro uniforme em [lo, hi].
+static int fuzzRange(uint64_t& state, int lo, int hi) {
+    return lo + static_cast<int>(fuzzNext(state) % static_cast<uint64_t>(hi - lo + 1));
+}
+
+// Fuzz (testes.md §5): 'systems' sistemas aleatórios com 1–12 tarefas,
+// período em [2,20], duração em [1,período], ingresso em [0,10], prazo em
+// [1, 2·período], 1–4 CPUs, RM ou EDF e semente aleatória. Cada um roda até
+// o fim, e as invariantes 1–8 são verificadas em TODOS os snapshots; a 9
+// (determinismo) a cada 50 sistemas, rodando de novo. Na primeira falha,
+// imprime a configuração que a reproduz e para.
+static void testFuzz(int systems) {
+    uint64_t state = 20261109;  // data da defesa do A: só uma semente fixa
+    int failures = 0;
+    long long snapshots = 0;
+    for (int n = 0; n < systems && failures == 0; ++n) {
+        const int taskCount = fuzzRange(state, 1, 12);
+        const int cpuCount = fuzzRange(state, 1, 4);
+        std::string text = std::string(fuzzRange(state, 0, 1) ? "EDF" : "RM") + ";2;" +
+                           std::to_string(cpuCount) + "\n";
+        for (int i = 0; i < taskCount; ++i) {
+            const int period = fuzzRange(state, 2, 20);
+            const int duration = fuzzRange(state, 1, period);
+            const int arrival = fuzzRange(state, 0, 10);
+            const int deadline = fuzzRange(state, 1, 2 * period);
+            text += "T" + std::to_string(i) + ";;" + std::to_string(arrival) + ";" +
+                    std::to_string(duration) + ";" + std::to_string(period) + ";" +
+                    std::to_string(deadline) + "\n";
+        }
+        const uint64_t seed = fuzzNext(state);
+
+        const std::vector<SystemSnapshot> h = runConfig(text, seed);
+        snapshots += static_cast<long long>(h.size());
+        std::vector<std::string> problems = checkInvariants(h);
+        for (const std::string& p : checkFinalState(h)) problems.push_back(p);
+        if (n % 50 == 0 && !sameHistory(h, runConfig(text, seed))) {
+            problems.push_back("invariante 9: duas execuções deram históricos diferentes");
+        }
+        if (!problems.empty()) {
+            ++failures;
+            std::cerr << "  fuzz: sistema " << n << " (semente " << seed << ") falhou:\n" << text;
+            for (std::size_t k = 0; k < problems.size() && k < 5; ++k) std::cerr << "    " << problems[k] << "\n";
+        }
+    }
+    CHECK_EQ(failures, 0);
+    std::cout << "  (fuzz: " << systems << " sistemas, " << snapshots << " snapshots verificados)\n";
+}
+
 // Executa todos os testes e imprime o placar "N checks, M falhas".
-int main() {
+int main(int argc, char* argv[]) {
+    // 'sim_tests --grid': imprime as grades de G1, G2 (RM e EDF) e G3 e sai.
+    if (argc > 1 && std::string(argv[1]) == "--grid") {
+        std::cout << "G1 (RM, 1 CPU)\n";
+        printGrid(runConfig(G1_TEXT), 14);
+        std::cout << "\nG2 (RM, 1 CPU)\n";
+        printGrid(runConfig("RM;2;1\n" + G2_TASKS), 15);
+        std::cout << "\nG2 (EDF, 1 CPU)\n";
+        printGrid(runConfig("EDF;2;1\n" + G2_TASKS), 15);
+        std::cout << "\nG3 (EDF, 2 CPUs, semente 1)\n";
+        printGrid(runConfig(G3_TEXT), 9);
+        return 0;
+    }
+    // 'sim_tests --rapido': tudo igual, mas o fuzz roda 500 sistemas em vez de
+    // 10 000 (segundos em vez de ~20 s), para o dia a dia. Antes de integrar
+    // na main, rodar o completo (sem argumentos).
+    const bool quick = argc > 1 && std::string(argv[1]) == "--rapido";
+
     testBuildSmoke();
     testSerializeSnapshot();
     testModelDefaults();
@@ -771,6 +1085,12 @@ int main() {
     testParserScope();
     testParserRoundTrip();
     testParserRobustness();
+    testGoldenG1();
+    testGoldenG2();
+    testGoldenG3();
+    testGoldenG4();
+    testFifoExtensibility();
+    testFuzz(quick ? 500 : 10000);
 
     std::cout << g_checks << " checks, " << g_fails << " falhas\n";
     return g_fails == 0 ? 0 : 1;

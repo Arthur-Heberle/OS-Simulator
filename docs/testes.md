@@ -16,7 +16,7 @@
 - `tests.cpp` também contém `printGrid(const std::vector<SystemSnapshot>&, int maxTicks)`: imprime uma linha por tick (`tick | CPU1 CPU2 ...` com o ID da tarefa ou `-`) e a lista de ocorrências do instante. Use-a para depurar e para a Fase 3 (sem GUI).
 - `runConfig(text)`: faz `parseConfig` → `Simulator::load` → `runToEnd` e devolve o histórico. As configs de teste são **strings embutidas** no arquivo (não criar arquivos extras: orçamento de 18).
 - Helpers: `taskOn(history, tick, cpu)` (ID ou "-"), `countOcc(history, type, taskId)`, `occAt(history, tick, type)`.
-- Rodar: `cmake --build build --target sim_tests && ./build/sim_tests` (a cada commit). Saída final: `N checks, M falhas`.
+- Rodar: `cmake --build build --target sim_tests && ./build/sim_tests` (a cada commit). Saída final: `N checks, M falhas`. `sim_tests --grid` imprime as grades de G1, G2 (RM e EDF) e G3. O fuzz de 10 000 sistemas leva ~20 s no build Release; `sim_tests --rapido` roda só 500 (dia a dia). Antes de integrar na `main`, rodar o completo.
 
 ---
 
@@ -71,6 +71,17 @@ EDF;2;1
 T1 tem prazo absoluto 10; T2 chega em 1 com prazo relativo 9 ⇒ absoluto 10. Empate de chave no instante 1.
 - Grade: `0:1 1:1 2:1 3:2 4:2 5:2` e CPU desligada em seguida (até o próximo período).
 - **Nenhuma** `Preemption` em 1 e **nenhum** `TieBreakDraw` (critério 1 resolveu). T2 só começa em 3.
+- Observação: aqui T1 também venceria pelo critério (3) (chegou antes), então o G4 sozinho **não isola** o critério (1). Por isso existe o G4b.
+
+### G4b — Critério (1) isolado
+```
+RM;2;1
+1;FF0000;0;4;10;10
+2;00FF00;2;2;10;5
+```
+Mesmo período (chave do RM empatada). Em 2, T2 chega com prazo absoluto 7 < 10 de T1: o critério (2) escolheria T2, mas o (1) mantém T1, que já executa.
+- Grade: `0:1 1:1 2:1 3:1 4:2 5:2 6:-`. **Nenhuma** `Preemption`; T2 termina em 6 (< 7), sem perda de prazo.
+- Teste de mutação: removendo o critério (1) do código, o G4b falha.
 
 ### G5 — Edição manual (suspender/retomar) sobre G1
 Procedimento: carregar G1; `stepForward` até `cursor == 4`; `applyEdit(Suspend, T1)`; `stepForward` até `cursor == 9`; `applyEdit(Resume, T1)`; `stepForward` até o instante 12.
