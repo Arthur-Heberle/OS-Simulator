@@ -1,5 +1,7 @@
 # CLAUDE.md — Simulador de SO multitarefa (UTFPR, Sistemas Operacionais)
 
+> O `AGENTS.md` (Codex) é um **espelho** deste arquivo: os agentes dos dois integrantes seguem as mesmas diretrizes. **Ao mudar um, mude o outro no mesmo commit.**
+
 Simulador de escalonamento de tempo real (RM/EDF) com N CPUs, Gantt gráfico, passo a passo com retroceder/avançar e edição manual. Entrega em 2 projetos incrementais: **A** (defesa 09/11/2026) e **B** (defesa 07/12/2026), mesma base de código. Equipe de 2 alunos; **a nota é individual**: o código precisa ser compreendido e defendido por ambos.
 
 ## Leia nesta ordem antes de qualquer tarefa
@@ -30,8 +32,17 @@ C++17 · Qt 6 (Widgets + Svg) só na interface · CMake · Qt dinâmico + deploy
 - **Não instale ferramentas** nem altere o ambiente sem perguntar. Se Qt/CMake/compilador faltar, pare e pergunte.
 - Se uma decisão do `design.md` parecer errada ou conflitar com o enunciado, **pare e pergunte** em vez de mudar por conta própria.
 - **Git: seguir `docs/fluxo-git.md`.** Uma branch por fase (`fase-N-tema`), `fix/tema` para bug que já está na `main`; merge na `main` só com build sem warnings e `sim_tests` verde; conflitos resolvidos na branch da fase, nunca na `main`. Cada um integra a própria branch (PR opcional, sem aprovação obrigatória) e avisa o colega. Ninguém altera `Model.h` sem avisar a dupla. Commits pequenos, no imperativo, em português. Tag `entrega-A` marca o que vai ao Moodle.
-- Preferências pessoais de cada integrante para o Claude Code (ex.: modo de ensino passo a passo, assinatura de commits) ficam no `CLAUDE.local.md` de cada um (não versionado), não neste arquivo.
+- Preferências pessoais de cada integrante (ex.: modo de ensino passo a passo, assinatura de commits) ficam fora do repositório: no Claude Code, em `CLAUDE.local.md` (não versionado); no Codex, em `~/.codex/AGENTS.md`. Elas podem mudar o **jeito de interagir**, nunca as regras deste arquivo.
 - Caminho local do usuário tem espaços (Windows): se o build reclamar, sugerir clonar em caminho sem espaços.
+
+## Postura do agente
+- **Não suponha.** Se algo for ambíguo (no pedido, no código ou no enunciado), pergunte antes de agir, com uma pergunta objetiva.
+- **Dê sua opinião e recomendação, com o motivo.** Com mais de uma opção válida, mostre prós e contras e diga qual escolheria.
+- **Se o usuário estiver errado, diga por quê** e ofereça uma alternativa; não concorde só para agradar. Se uma resposta sua anterior estava errada, admita e corrija.
+- **Justifique com o enunciado**, citando o código do requisito (ex.: `[A4.3]`, `[RG5]`) e a decisão (`D14`).
+- Prefira a solução **mais simples e legível** que atende os requisitos: o código será lido pelo professor e pela dupla.
+- **Nunca afirme que algo funciona sem ter compilado e testado.**
+- Respostas em **português**.
 
 ## Comandos (a partir de `simulador/`)
 ```
@@ -43,4 +54,4 @@ cmake --install build --prefix dist # empacotar a GUI com as DLLs do Qt (pasta s
 Os comandos de compilar devem ficar também no comentário de topo do `CMakeLists.txt` (a defesa compila ao vivo com CMake na frente do professor).
 
 ## Mapa do repositório (alvo)
-`simulador/` (entrega) · `docs/` (estes documentos, `fluxo-git.md`, PDF do enunciado e dúvidas) · `.gitignore` (**sem `*.md`**) · `.gitattributes`.
+`simulador/` (entrega) · `docs/` (estes documentos, `fluxo-git.md`, PDF do enunciado e dúvidas) · `CLAUDE.md` e `AGENTS.md` (mesmas diretrizes) · `.gitignore` (**sem `*.md`**) · `.gitattributes`.
