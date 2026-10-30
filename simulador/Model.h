@@ -191,4 +191,56 @@ struct ParseResult {
     Config config;                      // o que foi lido (com os padrões aplicados)
     std::vector<std::string> errors;    // if not empty, the simulation must not run
     std::vector<std::string> warnings;  // shown to the user, but the simulation can run
+
+    // true se o arquivo pode ser carregado (avisos não impedem) [A3.3.7].
+    bool ok() const { return errors.empty(); }
+};
+
+// ---------------------------------------------------------------------------
+// Edição manual [A1.5.2, A3.1, A3.4] (design.md §9)
+// ---------------------------------------------------------------------------
+// O usuário pode mudar o estado ou as características de qualquer tarefa (e
+// do sistema) em qualquer instante. Cada pedido vira um Edit; o Simulator o
+// valida numa cópia e, se for aceito, aplica no instante atual depois de
+// conclusões/ativações/prazos e antes do escalonador (D28), descarta o futuro
+// e recalcula (D15). Se for recusado, nada muda e EditResult explica o motivo.
+
+// Tipos de edição. Regras de validação de cada uma: tabela do design.md §9.
+// Mudar o estado para Running/Ready diretamente NÃO existe de propósito:
+// quem executa é decidido pelo escalonador.
+enum class EditKind {
+    // --- estado da tarefa ---
+    SetRemaining,  // tempo restante da ocorrência corrente (1..duração)
+    Suspend,       // Ready/Running/Dormant -> Suspended (libera a CPU)
+    Resume,        // Suspended -> Ready (tem ocorrência pendente) ou Dormant
+    ForceFinish,   // encerra a tarefa agora (Terminated)
+    Remove,        // retira a tarefa da simulação (Terminated; o índice não é apagado)
+    ActivateNow,   // Dormant: cria a próxima ocorrência neste instante
+    // --- características da tarefa (valem para as próximas ocorrências) ---
+    SetArrival,    // só antes do ingresso (NotArrived); novo valor >= instante atual
+    SetDuration,
+    SetPeriod,
+    SetDeadline,   // recalcula também o prazo absoluto da ocorrência corrente
+    SetColor,      // hex RRGGBB; aviso se repetida ou preta (D17)
+    // --- sistema ---
+    SetAlgorithm,  // qualquer nome do registro de escalonadores [A3.1]
+    SetCpuCount,   // 1..MAX_CPUS; ao reduzir, quem estava nas CPUs removidas volta a Ready
+    SetQuantum,
+    SetSeed,       // semente do sorteio (D14)
+    AddTask        // nova tarefa (newTask), com as mesmas validações do parser
+};
+
+// Um pedido de edição. Só os campos que o tipo usa são lidos.
+struct Edit {
+    EditKind kind = EditKind::SetRemaining;  // o que mudar
+    int taskIndex = -1;    // tarefa alvo (índice em SystemSnapshot::tasks); -1 = edição do sistema
+    long long value = 0;   // valor numérico (tempo, nº de CPUs, quantum, semente)
+    std::string text;      // valor textual (cor, nome do algoritmo)
+    Task newTask;          // tarefa completa, só para AddTask
+};
+
+// Resposta a uma edição [A3.4]: se recusada, 'message' diz em português o motivo.
+struct EditResult {
+    bool ok = false;
+    std::string message;
 };
