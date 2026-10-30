@@ -12,6 +12,13 @@ Cole no Claude Code, uma fase por vez:
 
 **Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); integração na `main` por pull request com revisão cruzada; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
 
+## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`)
+
+- **Fase 0:** concluída e integrada.
+- **Fase 1 (adiantada):** o conteúdo do `Model.h` (§5) já existe, mas ainda espalhado em `Task.h`, `CPU.h`, `SystemSnapshot.h` (e `Config`/`ParseResult` em `Parser.h`). Falta: fundir em `Model.h`, apagar `Task.cpp`, `Edit`/`EditKind`/`EditResult`, declarações restantes do `Simulator` (§9), `serializeSnapshot` e o fixture `demoHistoryG1`.
+- **Fase 2 (quase pronta):** `parseConfig` implementado conforme §8 (conferido à mão contra P1–P14 e robustez). Falta: `serializeConfig` (P14) e escrever P1–P14 em `tests.cpp`.
+- **Fase 3 (parcial):** registro, `tieHash`, RM/EDF com grupos de empate, `initState`, `makeNext`, `runOneTick` e `chooseTasks` prontos. Falta: `finishActivations`, `releaseActivations`, `checkDeadlines`, `dispatch` (regras nos comentários do `Simulator.cpp`) e todos os testes (G1–G4, FIFO, invariantes, fuzz).
+
 ## 1. Calendário (hoje = 23/10/2026; defesa do A = 09/11/2026)
 
 | Fase | Quem | Datas | Resultado |
