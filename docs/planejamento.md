@@ -12,11 +12,11 @@ Cole no Claude Code, uma fase por vez:
 
 **Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); cada um integra a própria branch na `main` (PR opcional, sem aprovação obrigatória) e avisa o outro para ler as mudanças; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
 
-## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 1)
+## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 2)
 
 - **Fase 0:** concluída e integrada.
-- **Fase 1: concluída na branch `fase-1-model`** (aguardando revisão do `Model.h` pela dupla e merge). `Model.h` reúne `Task`, `Job`, `CPU`, `Occurrence`, `SystemSnapshot`, `Config`, `ParseResult` (com `ok()`), `Edit`/`EditKind`/`EditResult`, `MAX_CPUS` e as ajudas `currentJob`, `isCandidate`, `naturalIdLess` (por blocos); `Task.h`, `CPU.h`, `SystemSnapshot.h` e `Task.cpp` saíram. Declarados sem definição: `parser::serializeConfig` (Fase 2) e `Simulator::reset/jumpTo/runToEnd/applyEdit` + `RunSummary`/`DEFAULT_MAX_TICKS` (Fase 4). Em `tests.cpp`: `serializeSnapshot`, `checkInvariants` (invariantes 1, 2, 3, 4, 5, 7, 8), `taskOn`/`countOcc`/`occTicks`. Fixture `demoHistoryG1()` (instantes 0–12, montado à mão) em `Simulator.cpp`, marcado TEMPORÁRIO (remover na Fase 7). `sim_tests`: 71 checks.
-- **Fase 2 (quase pronta):** `parseConfig` implementado conforme §8 (conferido à mão contra P1–P14 e robustez). Falta: definir `serializeConfig` (já declarada; P14) e escrever P1–P14 em `tests.cpp`.
+- **Fase 1: integrada na `main`.** `Model.h` reúne `Task`, `Job`, `CPU`, `Occurrence`, `SystemSnapshot`, `Config`, `ParseResult` (com `ok()`), `Edit`/`EditKind`/`EditResult`, `MAX_CPUS` e as ajudas `currentJob`, `isCandidate`, `naturalIdLess` (por blocos); `Task.h`, `CPU.h`, `SystemSnapshot.h` e `Task.cpp` saíram. Declarados sem definição: `parser::serializeConfig` (Fase 2) e `Simulator::reset/jumpTo/runToEnd/applyEdit` + `RunSummary`/`DEFAULT_MAX_TICKS` (Fase 4). Em `tests.cpp`: `serializeSnapshot`, `checkInvariants` (invariantes 1, 2, 3, 4, 5, 7, 8), `taskOn`/`countOcc`/`occTicks`. Fixture `demoHistoryG1()` (instantes 0–12, montado à mão) em `Simulator.cpp`, marcado TEMPORÁRIO (remover na Fase 7). `sim_tests`: 71 checks.
+- **Fase 2: concluída na branch `fase-2-parser`** (aguardando merge). `parseConfig` conforme §8, com cabeçalhos RG6, garantia de não lançar exceção, sinal `+` e paleta automática sem preto/branco; `serializeConfig` (ida e volta); P1–P14 e robustez no `sim_tests` (192 checks; 100 000 tarefas em ~0,6 s).
 - **Fase 3 (parcial):** registro, `tieHash`, RM/EDF com grupos de empate, `initState`, `makeNext`, `runOneTick` e `chooseTasks` prontos. Falta: `finishActivations`, `releaseActivations`, `checkDeadlines`, `dispatch` (regras nos comentários do `Simulator.cpp`) e todos os testes (G1–G4, FIFO, fuzz). O verificador de invariantes e os helpers de consulta já existem (Fase 1); o G1 do motor pode ser conferido com o mesmo roteiro do teste do `demoHistoryG1`.
 - **Fase 4:** a API já está declarada em `Simulator.h` (Fase 1); falta definir e testar.
 
@@ -119,9 +119,9 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 6. Implementar **P1–P14 + robustez** em `tests.cpp`.
 
 **Critérios de aceitação**
-- [ ] P1–P14 e casos de robustez verdes; nenhuma exceção escapa; 100 000 tarefas em tempo razoável.
-- [ ] Mensagens de erro legíveis (mostrar 5 exemplos no relatório).
-- [ ] `periodo = 0` não derruba o carregamento (aviso, tarefa ignorada); `periodo < 0` é erro com linha/campo/valor (Q10); IDs `BSxx…` com período > 0 carregam como periódicas comuns (Q12).
+- [x] P1–P14 e casos de robustez verdes; nenhuma exceção escapa; 100 000 tarefas em tempo razoável.
+- [x] Mensagens de erro legíveis (mostrar 5 exemplos no relatório).
+- [x] `periodo = 0` não derruba o carregamento (aviso, tarefa ignorada); `periodo < 0` é erro com linha/campo/valor (Q10); IDs `BSxx…` com período > 0 carregam como periódicas comuns (Q12).
 
 **Commit:** `Parser: leitura tolerante, erros por linha/campo e serializador`.
 

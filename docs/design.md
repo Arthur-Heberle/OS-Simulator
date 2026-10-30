@@ -133,7 +133,7 @@ OS-Simulator/
 | D14 | Desempate (A4.3) | Ordem: (1) estava `Running` antes do escalonamento; (2) menor prazo **absoluto** da ocorrência corrente; (3) menor ingresso; (4) menor duração; (5) **sorteio determinístico** `tieHash(seed, tick, taskIndex)` (splitmix64), sem estado, feito pelo `Simulator` sobre os grupos de empate que o escalonador devolve (§7). Ícone de dado em `x=k` na tarefa escolhida. Só se emite o ícone quando o sorteio realmente decide algo (`|grupo empatado| > slotsLeft`). (2) confirmado pelo professor (Q11) | Sem estado ⇒ retroceder/avançar e re-simular após edição reproduzem o mesmo sorteio; evita guardar `mt19937` (~2,5 KB) em cada snapshot; `std::uniform_int_distribution` não é portável entre compiladores |
 | D15 | Edição no passado | Editar no passo `k` descarta `history[k+1..]` e segue da nova linha do tempo; ícone "edição manual" em `x=k` | Causalidade: o futuro antigo deixou de valer |
 | D16 | Histórico | 1 snapshot completo por tick, em memória; sem threads | A1.5.2; sem threads não há corrida e o determinismo é trivial |
-| D17 | Cores | Hex RGB de 6 dígitos (tolera `#`, caixa livre); fora disso é erro. Cor ausente ⇒ paleta automática. Cor repetida ou escura demais (preta) ⇒ **aviso**, e a tarefa recebe a próxima cor livre da paleta (ideia do Arthur) | A2.1 exige uma cor diferente por tarefa e reserva o preto para "suspensa": trocar a cor garante isso sem barrar um arquivo válido |
+| D17 | Cores | Hex RGB de 6 dígitos (tolera `#`, caixa livre); fora disso é erro. Cor ausente ⇒ paleta automática. Cor repetida, escura demais (quase preta) ou clara demais (quase branca) ⇒ **aviso**, e a tarefa recebe a próxima cor livre da paleta (ideia do Arthur) | A2.1 exige uma cor diferente por tarefa, reserva o preto para "suspensa" e usa a ausência de cor para "pronta" (uma barra branca no fundo branco pareceria pronta): trocar a cor garante isso sem barrar um arquivo válido |
 | D18 | Erros de arquivo | **Fatal** (nada é carregado; mostra arquivo, linha, campo, valor, motivo) vs **aviso** (carrega e informa). Tolera espaços, linhas vazias, CRLF/LF, BOM UTF-8, `;` final opcional, campos opcionais ausentes | A3.3.3, A3.3.6, A3.3.7 |
 | D19 | Erro de redação do enunciado | A2.3 cita "requisito 1.4"; implementar o **1.5** | O conteúdo é sobre os modos de execução |
 | D20 | Código único A+B | Uma só árvore; entrega do A = tag `entrega-A`; B continua dali. Sem `Project-A/` e `Project-B/` | O B complementa o A; duas pastas geram divergência |
@@ -146,7 +146,7 @@ OS-Simulator/
 | D27 | Idioma | Comentários em português; identificadores em inglês; mensagens ao usuário em português | Defesa em português; convenção do repo |
 | D28 | Semântica da edição | Edição no instante `k` é aplicada **depois** de conclusões/ativações/perdas de prazo do instante e **antes** do escalonador; reexecuta o instante a partir de `history[k-1]` | O escalonador já enxerga o estado editado; preserva determinismo |
 | D29 | Parser fora do `Simulator` | `ParseResult parseConfig(const std::string&)` é função livre; a GUI lê o arquivo com `QFile` e passa o texto | Núcleo sem I/O de arquivo; testes passam strings; `QFile` aceita qualquer caminho/pendrive/Unicode (A3.3.4) |
-| D30 | `lista_eventos` | Campo = **tudo depois do 6º `;`** (sem o `;` final), guardado cru em `Task.rawEvents` | O formato dos eventos só é definido no B; não quebrar se contiverem `;` |
+| D30 | `lista_eventos` | Campo = **tudo depois do 6º `;`** (sem o `;` final), guardado cru em `Task.rawEvents`; como todo campo, cada pedaço entre `;` é aparado (`a; b` vira `a;b`) | O formato dos eventos só é definido no B; não quebrar se contiverem `;`. Aparar segue o A3.3.6 (espaços não são erro) |
 
 ---
 
@@ -336,7 +336,7 @@ uint64_t    tieHash(uint64_t seed, Tick now, int taskIndex);            // split
 
 **Linha do sistema:** `algoritmo;quantum;qtde_cpus`. Campos ausentes ⇒ padrão (aviso informativo). Algoritmo desconhecido ⇒ **erro** listando `schedulerNames()`. `quantum` inteiro ≥ 1. `qtde_cpus` em `1..MAX_CPUS`.
 
-**Linha de tarefa:** `id;cor;ingresso;duracao;periodo;prazo;lista_eventos` — `lista_eventos` = tudo depois do 6º `;` (D30). Obrigatórios: `id`, `ingresso`, `duracao`, `periodo`. Opcionais: `cor` (vazia ⇒ paleta automática HSL por razão áurea, evitando preto/branco e cores já usadas), `prazo` (vazio/0 ⇒ `periodo`), `lista_eventos`.
+**Linha de tarefa:** `id;cor;ingresso;duracao;periodo;prazo;lista_eventos` — `lista_eventos` = tudo depois do 6º `;` (D30). Obrigatórios: `id`, `ingresso`, `duracao`, `periodo`. Opcionais: `cor` (vazia ⇒ paleta automática: 12 cores fixas bem distintas e, depois, uma sequência que percorre as 2²⁴ cores sem repetir; nunca escolhe cor quase preta, quase branca ou já usada), `prazo` (vazio/0 ⇒ `periodo`), `lista_eventos`.
 
 **Erros fatais** (mensagem: linha, campo, valor, motivo, o que seria válido): menos de 2 linhas úteis; algoritmo desconhecido; `quantum`/`qtde_cpus` inválidos; `id` vazio ou duplicado (sem caixa); `cor` fora de `RRGGBB`; `ingresso < 0`; `duracao ≤ 0`; `periodo` não inteiro; **`periodo < 0` (Q10: erro no A; esporádica só no B)**; `prazo < 0`; número não inteiro ou > 10⁹; campos obrigatórios ausentes; nenhuma tarefa simulável (todas ignoradas ou nenhuma).
 
@@ -344,7 +344,7 @@ uint64_t    tieHash(uint64_t seed, Tick now, int taskIndex);            // split
 
 **Tabela de mensagens** (ideia do Arthur, mantida): cada mensagem tem um código (`MsgCode`) ligado à severidade (erro/aviso) e a um modelo de texto com `{}` (`MESSAGES`); `addMessage` monta o texto. Assim a severidade de cada caso fica num único lugar, fácil de mudar se o professor responder diferente. Todos os campos de uma linha são validados, para o usuário ver **todos** os erros de uma vez.
 
-**Robustez:** nunca lançar exceção para o chamador; arquivo vazio, binário, linha gigante e 100 000 tarefas devem retornar resultado sensato. Todo arquivo que obedeça ao formato **deve** carregar (A3.3.7).
+Inteiros aceitam sinal `+` (`+5`). **Robustez:** nunca lançar exceção para o chamador (`parseConfig` protege a leitura com `try/catch` e converte uma falha interna no erro `InternalError`); arquivo vazio, binário, linha gigante e 100 000 tarefas devem retornar resultado sensato. Todo arquivo que obedeça ao formato **deve** carregar (A3.3.7).
 
 ---
 

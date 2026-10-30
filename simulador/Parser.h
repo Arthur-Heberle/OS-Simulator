@@ -1,3 +1,28 @@
+// =============================================================================
+// Parser.h — Leitura do arquivo de configuração (texto -> Config) e o caminho
+// inverso (Config -> texto).
+//
+// O quê: parser::parseConfig lê o formato do enunciado [A3.3]
+//     algoritmo_escalonamento;quantum;qtde_cpus
+//     id;cor;ingresso;duracao;periodo;prazo;lista_eventos
+// e devolve a Config com os padrões aplicados [A3.2] mais TODOS os erros e
+// avisos encontrados, cada um com linha, campo, valor e motivo [A3.3.6].
+// parser::serializeConfig faz o caminho inverso (salvar a configuração).
+//
+// Por quê assim:
+//   - Recebe o TEXTO, não o caminho (D29): quem abre o arquivo é a interface
+//     (QFile aceita qualquer caminho, pendrive e acentos, A3.3.4) e os testes
+//     passam strings, sem criar arquivos.
+//   - Erro x aviso (D18): erro = não há padrão possível, nada é carregado;
+//     aviso = usa um padrão ou ignora algo, e a simulação roda. Na dúvida,
+//     aceitar com aviso: arquivo válido nunca pode falhar [A3.3.7].
+//   - Severidade e texto de cada mensagem ficam numa tabela (MsgCode ->
+//     MESSAGES): mudar uma regra, se o professor responder diferente, é
+//     mexer numa linha.
+//
+// Requisitos: A3.2, A3.3, A3.3.1–A3.3.7, A4.1, A4.4, A5.
+// Decisões: D4, D7, D8, D12, D17, D18, D29, D30; respostas Q10 e Q12.
+// =============================================================================
 #pragma once
 
 #include <cstdint>
@@ -29,6 +54,7 @@ enum class MsgCode {
     // Errors: there is no sensible default, so the item cannot be used
     // (o arquivo inteiro não é carregado; design.md §8, D18)
     EmptyFile,
+    InternalError,
     TooFewLines,
     NoValidTasks,
     UnknownAlgorithm,
@@ -45,6 +71,7 @@ enum class MsgCode {
     AutoColor,
     DuplicateColor,
     DarkColor,
+    LightColor,
     DefaultDeadline,
     DeadlineAfterPeriod,
     DurationAfterPeriod,
@@ -61,6 +88,8 @@ struct MessageInfo {
 inline const std::map<MsgCode, MessageInfo> MESSAGES = {
     {MsgCode::EmptyFile,
      {Severity::Error, "O arquivo de configuração está vazio."}},
+    {MsgCode::InternalError,
+     {Severity::Error, "Não foi possível ler o arquivo (falha interna: {}). Nada foi carregado."}},
     {MsgCode::TooFewLines,
      {Severity::Error, "O arquivo precisa ter ao menos 2 linhas: a 1ª com 'algoritmo;quantum;qtde_cpus' e, a partir da 2ª, uma tarefa por linha."}},
     {MsgCode::NoValidTasks,
@@ -90,6 +119,8 @@ inline const std::map<MsgCode, MessageInfo> MESSAGES = {
      {Severity::Warning, "Linha {}: a cor '{}' da tarefa '{}' já é usada na linha {}. Usando '{}' no lugar (cada tarefa precisa de uma cor diferente)."}},
     {MsgCode::DarkColor,
      {Severity::Warning, "Linha {}: a cor '{}' da tarefa '{}' é escura demais (o preto indica tarefa suspensa no gráfico). Usando '{}' no lugar."}},
+    {MsgCode::LightColor,
+     {Severity::Warning, "Linha {}: a cor '{}' da tarefa '{}' é clara demais (no gráfico, a ausência de cor indica tarefa pronta). Usando '{}' no lugar."}},
     {MsgCode::DefaultDeadline,
      {Severity::Warning, "Linha {}: prazo da tarefa '{}' não informado (ou 0). Usando o período ({})."}},
     {MsgCode::DeadlineAfterPeriod,
@@ -124,6 +155,6 @@ namespace parser {
     // Gera o texto de um arquivo de configuração a partir de uma Config
     // (ida e volta: parseConfig(serializeConfig(c)) reproduz c; teste P14).
     // Usado por "Salvar configuração" na interface, depois de edições (A3.1).
-    // DECLARADA NA FASE 1, DEFINIDA NA FASE 2 (design.md §8).
+    // A semente do sorteio não faz parte do formato e não é escrita.
     std::string serializeConfig(const Config& config);
 }

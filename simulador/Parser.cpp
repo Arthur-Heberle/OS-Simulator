@@ -1,3 +1,20 @@
+// =============================================================================
+// Parser.cpp — Implementação do parser do arquivo de configuração (Parser.h).
+//
+// Fluxo de parseConfig:
+//   1. normalizeText: tira o BOM e troca CRLF/CR por LF;
+//   2. lê linha a linha contando TODAS as linhas (as mensagens apontam a linha
+//      real do arquivo); linhas em branco são ignoradas [A3.3.6];
+//   3. a 1ª linha útil é a do sistema (parseSystemLine); as demais são tarefas
+//      (parseTaskLine), cada uma validada por inteiro para mostrar todos os
+//      erros de uma vez;
+//   4. regras do arquivo como um todo (mínimo de 2 linhas, alguma tarefa
+//      simulável).
+// serializeConfig escreve a Config de volta no mesmo formato.
+//
+// Requisitos e decisões: ver o cabeçalho de Parser.h.
+// =============================================================================
+
 #include "Parser.h"
 #include "Scheduler.h"   // registro de algoritmos [A4.2]
 
@@ -5,6 +22,7 @@
 #include <charconv>
 #include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <sstream>
 
 // Everything inside this unnamed namespace is private to this file.
@@ -137,6 +155,11 @@ bool parseInt(const std::string& text, Int& out) {
     }
     const char* begin = text.data();
     const char* end = text.data() + text.size();
+    // "+5" também é um inteiro válido (from_chars não aceita o '+'): na dúvida,
+    // aceitar [A3.3.7]. Só se vier um algarismo depois, para "+-5" continuar inválido.
+    if (*begin == '+' && text.size() > 1 && std::isdigit(static_cast<unsigned char>(begin[1]))) {
+        ++begin;
+    }
 
     auto [stop, error] = std::from_chars(begin, end, out);
     return error == std::errc() && stop == end;
@@ -232,6 +255,15 @@ bool isTooDark(const std::string& color) {
     return r < 0x40 && g < 0x40 && b < 0x40;
 }
 
+// Cor quase branca (os três canais acima de 0xE0): sobre o fundo branco do
+// Gantt, uma barra assim pareceria "pronta" (ausência de cor, A2.1). A paleta
+// automática nunca a escolhe e, se vier do arquivo, é trocada com aviso (D17).
+bool isTooLight(const std::string& color) {
+    unsigned value = static_cast<unsigned>(std::stoul(color, nullptr, 16));
+    unsigned r = (value >> 16) & 0xFF, g = (value >> 8) & 0xFF, b = value & 0xFF;
+    return r > 0xE0 && g > 0xE0 && b > 0xE0;
+}
+
 // k-ésima cor candidata: primeiro uma paleta fixa de cores bem distintas;
 // depois uma sequência que percorre as 2^24 cores sem repetir (multiplicar
 // por um número ímpar é uma permutação módulo 2^24).
@@ -257,7 +289,7 @@ std::string candidateColor(std::size_t k) {
 std::string nextFreeColor(const std::map<std::string, int>& usedColors, std::size_t& cursor) {
     while (true) {
         std::string color = candidateColor(cursor++);
-        if (usedColors.count(color) == 0 && !isTooDark(color)) {
+        if (usedColors.count(color) == 0 && !isTooDark(color) && !isTooLight(color)) {
             return color;
         }
     }
@@ -411,6 +443,10 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
         std::string newColor = nextFreeColor(usedColors, colorCursor);
         addMessage(result, MsgCode::DarkColor, {line, color, task.id, newColor});
         color = newColor;
+    } else if (isTooLight(color)) {
+        std::string newColor = nextFreeColor(usedColors, colorCursor);
+        addMessage(result, MsgCode::LightColor, {line, color, task.id, newColor});
+        color = newColor;
     }
 
     task.color = color;
@@ -423,7 +459,8 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
 // Public function
 // ---------------------------------------------------------------------------
 
-ParseResult parser::parseConfig(const std::string& text) {
+// Leitura propriamente dita; parser::parseConfig (abaixo) só a protege.
+static ParseResult parseText(const std::string& text) {
     ParseResult result;
     std::stringstream stream(normalizeText(text));
     std::string line;
@@ -471,4 +508,45 @@ ParseResult parser::parseConfig(const std::string& text) {
     }
 
     return result;
+}
+
+ParseResult parser::parseConfig(const std::string& text) {
+    // O parser nunca deixa uma exceção chegar à interface (design.md §8): o
+    // código acima não lança nada em uso normal, mas falta de memória num
+    // arquivo absurdo (ex.: gigabytes de texto) ainda poderia. Nesse caso o
+    // usuário recebe um erro claro, e nada é carregado [A3.3.6, A5].
+    try {
+        return parseText(text);
+    } catch (const std::exception& e) {
+        ParseResult result;
+        addMessage(result, MsgCode::InternalError, {e.what()});
+        return result;
+    } catch (...) {
+        ParseResult result;
+        addMessage(result, MsgCode::InternalError, {"erro desconhecido"});
+        return result;
+    }
+}
+
+std::string parser::serializeConfig(const Config& config) {
+    // Mesmo formato que parseConfig lê [A3.3], uma linha por tarefa, sem ';'
+    // final. Números com std::to_string (não dependem de locale). Ida e volta
+    // (teste P14): parseConfig(serializeConfig(c)) devolve os mesmos campos de c,
+    // porque os padrões já aplicados (prazo = período, cor automática) são
+    // escritos por extenso.
+    // A semente do sorteio (Config::seed) NÃO é escrita: o formato do enunciado
+    // não tem esse campo, e um 4º campo na linha do sistema faria o arquivo
+    // fugir do formato. Ao recarregar, ela volta ao padrão.
+    std::string out = config.algorithm + ";" + std::to_string(config.quantum) + ";" +
+                      std::to_string(config.cpuCount) + "\n";
+    for (const Task& t : config.tasks) {
+        out += t.id + ";" + t.color + ";" + std::to_string(t.arrival) + ";" +
+               std::to_string(t.duration) + ";" + std::to_string(t.period) + ";" +
+               std::to_string(t.deadline);
+        if (!t.rawEvents.empty()) {
+            out += ";" + t.rawEvents;  // lista_eventos crua, com os ';' internos (D30)
+        }
+        out += "\n";
+    }
+    return out;
 }
