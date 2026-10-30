@@ -10,7 +10,7 @@
 //     com 500 sistemas (dia a dia); 'sim_tests --grid'
 //     imprime as grades de G1, G2 e G3.
 //   - Fase 4: G5, G6, invariante 10, cada tipo de edição, limites do
-//     runToEnd e fuzz de edições.
+//     runToEnd, fuzz de edições e tempo do passo com 100 tarefas (< 16 ms).
 //
 // Por quê assim:
 //   - Sem GoogleTest ou outra biblioteca: a macro CHECK abaixo basta e evita
@@ -1306,6 +1306,28 @@ static void testRunToEnd() {
     CHECK(noViolations(checkInvariants(stuck.history())));
 }
 
+// Desempenho: avançar um passo com 100 tarefas leva menos de 16 ms (um quadro
+// de tela a 60 Hz), para o passo a passo e o "play" da janela ficarem fluidos
+// [A1.5, A5]. Sistema sobrecarregado de propósito (utilização 6 em 4 CPUs): há
+// sempre muitas tarefas prontas, o pior caso para o escalonador.
+static void testStepSpeed() {
+    std::string text = "RM;2;4\n";
+    for (int i = 0; i < 100; ++i) text += "T" + std::to_string(i) + ";;0;3;50;50\n";
+    Simulator sim = loadSim(text);
+
+    const int steps = 200;
+    const auto start = std::chrono::steady_clock::now();
+    int done = 0;
+    while (done < steps && sim.stepForward()) ++done;
+    const auto micros = std::chrono::duration_cast<std::chrono::microseconds>(
+                            std::chrono::steady_clock::now() - start).count();
+
+    CHECK_EQ(done, steps);  // a simulação não acabou antes dos 200 passos
+    const double avgMs = done > 0 ? static_cast<double>(micros) / done / 1000.0 : 0.0;
+    CHECK(avgMs < 16.0);
+    std::cout << "  (passo com 100 tarefas: " << avgMs << " ms em média, " << done << " passos)\n";
+}
+
 // Fuzz de edições: sequências aleatórias de avançar/voltar/pular/editar em
 // sistemas aleatórios. Toda recusa deixa histórico e cursor intactos; no fim,
 // as invariantes valem em todo o histórico e repetir a sequência dá o mesmo
@@ -1420,6 +1442,7 @@ int main(int argc, char* argv[]) {
     testGoldenG6();
     testEditKinds();
     testRunToEnd();
+    testStepSpeed();
     testEditFuzz(quick ? 30 : 200);
 
     std::cout << g_checks << " checks, " << g_fails << " falhas\n";
