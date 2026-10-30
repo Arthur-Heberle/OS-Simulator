@@ -118,7 +118,7 @@ OS-Simulator/
 | ID | Assunto | Decisão | Porquê (usar na defesa) |
 |---|---|---|---|
 | D1 | Estados e filas | `NotArrived`, `Ready`, `Running`, **`Dormant`** (concluiu a ocorrência do período e espera a próxima ativação), **`Suspended`** (impedida: manual no A; mutex/E/S no B), `Terminated`. Filas lógicas: prontos (global), dormentes (ordenada por próxima ativação), suspensos; `Running` é por CPU | O professor (Q3) mandou decidir e justificar: cada fila tem uma semântica. `Dormant` não concorre à CPU até o próximo release; misturar com `Suspended` esconderia o motivo e atrapalharia o B |
-| D2 | Desenho dos estados | `Running`: sólido na cor + rótulo `CPUk`; `Ready`: só contorno, sem cor; `Suspended`: preto pontilhado; `Dormant`/`NotArrived`: só linha-base | A2.1 (ausência de cor = pronta; preto + padrão diferente = suspensa); distingue "pronta" de "fora do sistema" |
+| D2 | Desenho dos estados | Como nas figuras da seção 6.4 do Maziero: barras com contorno preto; `Running`: sólido na cor + rótulo `CPUk`; `Ready`: retângulo branco (sem cor); `Suspended`: preto pontilhado; `Dormant`/`NotArrived`/`Terminated`: **nada** (o livro não desenha linha de base) | A2.1 (ausência de cor = pronta; preto + padrão diferente = suspensa) e A2.5 (similar ao livro); "pronta" (retângulo branco) continua distinta de "fora do sistema" (vazio) |
 | D3 | Tempo e snapshot | `Tick = long long`. Tick `t` cobre `[t, t+1)`. **`snapshot[k]` = estado do sistema no instante k, após processar o instante k**; descreve o que ocorre em `[k,k+1)`. Ativação, perda de prazo, preempção, sorteio ficam em `x=k`; término em `x=k+1` (aparece em `snapshot[k+1]`) | A2.2 ("momento exato") + alinha com o `SystemSnapshot` já criado (`occurrences` guardadas no snapshot do tick). O Gantt lê uma coluna por snapshot |
 | D4 | ID | `std::string` única, sem diferenciar caixa. Eixo Y em **ordem natural por blocos** (`naturalIdLess`): blocos de dígitos comparados pelo valor, blocos de texto sem caixa, número antes de texto, empate pelo texto original | O B usa `BS01`, `PS02`…; A2.5 exige ordem por ID. A regra "numérico se ambos forem números, senão texto" não é transitiva (2 < 10, 10 < 1A, 1A < 2) e quebraria o `std::sort`; por blocos dá o mesmo resultado para ids só numéricos |
 | D5 | Ocorrência (job) | `Task.jobs` é `std::vector<Job>` (frente = ocorrência corrente). Se o próximo período chega antes de a anterior terminar, a ativação é **enfileirada**, não descartada | A3.3: a tarefa que perde o prazo continua executando; descartar ativações esconderia a sobrecarga |
@@ -403,11 +403,11 @@ Estado `Running` na GUI aparece como somente leitura; os botões oferecidos são
 
 ## 10. Visualização (A2.x, RG3)
 
-**Consultar a seção 6.4 do livro do Maziero** e imitar as convenções (A2.5). O que o enunciado já fixa:
+**Convenções da seção 6.4 do livro do Maziero** (A2.5; figuras 6.1–6.10 conferidas, capturas em `docs/ref/`, fora do Git): eixo Y com seta para cima e um rótulo por tarefa (t1 colado no eixo X); eixo X com seta para a direita, rótulo "t" e um número por instante; linhas verticais pontilhadas cinza a cada instante; cada tarefa é uma barra contínua com contorno preto, **cor sólida = executando**, **branco = pronta**, nada fora do sistema; trechos consecutivos no mesmo estado formam um único retângulo. O livro não tem ícones: os do enunciado (A2.2, RG3) são desenhados por cima desse estilo. O que o enunciado já fixa:
 
-**Layout.** Eixo X = tempo (rótulo a cada tick; a cada *n* quando o zoom é pequeno). **Painel superior: uma linha por tarefa**, ID decrescente para cima (**menor ID colado no eixo X**, ordem natural), com amostra de cor + ID. **Painel inferior: uma linha por CPU** (CPU1 no topo), mesma escala, mostrando a tarefa que ocupou a CPU e os períodos desligados. Tarefas `ignored` não têm linha (aparecem cinzas na tabela). Legenda sempre visível (inclusive nas imagens). Título com algoritmo, nº de CPUs, semente e tick final.
+**Layout.** Eixo X = tempo (rótulo a cada tick; a cada *n* ∈ {1, 2, 5, 10, 20, 50…} quando o zoom é pequeno). **Painel superior: uma linha por tarefa**, ID decrescente para cima (**menor ID colado no eixo X**, ordem natural), com amostra de cor + ID. **Painel inferior: uma linha por CPU** (CPU1 no topo), mesma escala, mostrando a tarefa que ocupou a CPU e os períodos desligados. Tarefas `ignored` não têm linha (aparecem cinzas na tabela). Legenda sempre visível (inclusive nas imagens). Título com algoritmo, nº de CPUs, semente e tick final.
 
-**Células (tarefa × tick):** `Running` = sólido na cor + texto `CPUk` (cor do texto por luminância); `Ready` = só contorno; `Suspended` = preto pontilhado; `Dormant`/`NotArrived` = só linha-base. CPU desligada = hachura cinza diagonal.
+**Células (tarefa × tick):** `Running` = sólido na cor + texto `CPUk` (cor do texto por luminância); `Ready` = retângulo branco com contorno; `Suspended` = preto pontilhado; `Dormant`/`NotArrived`/`Terminated` = nada. CPU desligada = hachura cinza diagonal. Pontos e hachura são desenhados um a um (e não por padrão de pincel), para sair igual no PNG e no SVG.
 
 **Ícones** (formas desenhadas com `QPainterPath`, sem fontes/emoji) — cada tipo distinto, todos na legenda:
 
@@ -420,11 +420,13 @@ Estado `Running` na GUI aparece como somente leitura; os botões oferecidos são
 | `Preemption` | triângulo laranja | `x=k`, onde a tarefa saiu da CPU |
 | `Migration` | seta dupla roxa | `x=k` |
 | `TieBreakDraw` | dado (quadrado com pontos) | `x=k`, tarefa sorteada que (re)começa (A4.3) |
-| `CpuOff` / `CpuOn` | tomada cortada / ligada | painel de CPUs |
-| `ManualEdit` | losango magenta | `x=k` |
+| `CpuOff` / `CpuOn` | símbolo liga/desliga cinza cortado / verde | painel de CPUs |
+| `ManualEdit` | losango magenta | `x=k`, na linha da tarefa; edição do sistema (algoritmo, CPUs…) sobre o eixo X |
 | `Dispatch` | (sem ícone; só log) | — |
 
-**Interação.** Zoom 4–64 px/tick; rolagem H/V; tooltip (tarefa, CPU, tick, ocorrência, prazo); no passo a passo, redesenha a cada passo e rola até o tick atual; no modo completo mostra só o resultado final (A1.5.3). Painel textual com intervalos desligados por CPU e totais (ticks e %) (A1.2).
+Para ícones do mesmo instante não se cobrirem, cada tipo ocupa uma parte da faixa da linha: chegada na metade de cima, término na de baixo, X da perda de prazo e dado do sorteio nos cantos de cima, preempção/migração/edição embaixo.
+
+**Interação.** Zoom 4–64 px/tick (Ctrl + roda do mouse); rolagem H/V; legenda fixa embaixo, fora da rolagem; destaque amarelo do instante atual; tooltip (tarefa, CPU, tick, estado, ocorrência corrente com restante e prazo, ocorrências do instante); no passo a passo, redesenha a cada passo e rola até o tick atual; no modo completo mostra só o resultado final (A1.5.3). Painel textual com intervalos desligados por CPU e totais (ticks e %) (A1.2).
 
 **Renderizador único:**
 
@@ -440,7 +442,7 @@ public:
 };
 ```
 
-`paint` desenha só a faixa visível (rápido com 100 000 ticks). **Exportação (A2.4):** gera automaticamente **PNG + SVG da simulação inteira** (tarefas + CPUs + legenda + título) ao fim da simulação, nos dois modos; também há "Exportar imagem" no menu a qualquer momento. SVG é sempre completo (sem teto). PNG: `tickWidth` parte de 24 e diminui até 4 para caber em ~30 000 px de largura; se ainda não couber, divide em `parte_N.png`. Nome: `gantt_<config>_<aaaammdd-hhmmss>.png/.svg`, na pasta escolhida (padrão: a do arquivo de configuração; se sem permissão, `Documentos`). **Nunca** capturar a janela.
+`paint` desenha só a faixa visível (rápido com 100 000 ticks). **Exportação (A2.4):** gera automaticamente **PNG + SVG da simulação inteira** (tarefas + CPUs + legenda + título) ao fim da simulação, nos dois modos; também há "Exportar imagem" no menu a qualquer momento. Nos dois formatos o `tickWidth` parte de 24 e diminui até 4 para caber em ~30 000 px de largura. SVG: sempre um arquivo só, completo (sem teto; ~10 MB para 93 000 instantes). PNG: se ainda não couber (ou passar de ~100 milhões de pixels), divide em `<nome>_parte_N.png`, cada parte com título, eixos e legenda. O `GanttWidget` reduz o zoom se a largura passar do limite de um QWidget (16 777 215 px); a exportação não tem esse limite. Nome: `gantt_<config>_<aaaammdd-hhmmss>.png/.svg`, na pasta escolhida (padrão: a do arquivo de configuração; se sem permissão, `Documentos`). **Nunca** capturar a janela.
 
 ---
 

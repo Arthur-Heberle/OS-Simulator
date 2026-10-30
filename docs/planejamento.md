@@ -12,14 +12,15 @@ Cole no Claude Code, uma fase por vez:
 
 **Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); cada um integra a própria branch na `main` (PR opcional, sem aprovação obrigatória) e avisa o outro para ler as mudanças; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
 
-## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 4)
+## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 5)
 
 - **Fase 0:** concluída e integrada.
 - **Fase 1: integrada na `main`.** `Model.h` reúne `Task`, `Job`, `CPU`, `Occurrence`, `SystemSnapshot`, `Config`, `ParseResult` (com `ok()`), `Edit`/`EditKind`/`EditResult`, `MAX_CPUS` e as ajudas `currentJob`, `isCandidate`, `naturalIdLess` (por blocos); `Task.h`, `CPU.h`, `SystemSnapshot.h` e `Task.cpp` saíram. Declarados sem definição: `parser::serializeConfig` (Fase 2) e `Simulator::reset/jumpTo/runToEnd/applyEdit` + `RunSummary`/`DEFAULT_MAX_TICKS` (Fase 4). Em `tests.cpp`: `serializeSnapshot`, `checkInvariants` (invariantes 1, 2, 3, 4, 5, 7, 8), `taskOn`/`countOcc`/`occTicks`. Fixture `demoHistoryG1()` (instantes 0–12, montado à mão) em `Simulator.cpp`, marcado TEMPORÁRIO (remover na Fase 7). `sim_tests`: 71 checks.
 - **Fase 2: integrada na `main`.** `parseConfig` conforme §8 (exceções contidas, sinal `+`, paleta sem preto/branco, troca de cor quase preta/quase branca), `serializeConfig`, P1–P14 e robustez.
 - **Fase 3: integrada na `main`.** Motor completo (§6), G1–G4, G4b, FIFO, invariantes 1–9, fuzz de 10 000 sistemas; `sim_tests --grid` e `--rapido`.
-- **Fase 4: concluída na branch `fase-4-historico`** (aguardando merge). `reset`, `jumpTo`, `runToEnd` (limites de instantes e de memória estimada), `applyEdit` para as 16 `EditKind` (D28/D15, com reaplicação das edições do mesmo instante; `Simulator` guarda a `Config` e `edits_`), `beginInstant`/`scheduleAndDispatch` separados. Testes: G5, G6, cada edição, `runToEnd`, fuzz de edições. `sim_tests`: 1286 checks (~35 s; `--rapido` ~4 s).
-- **Núcleo completo** (Fases 1–4). Próximas: Fase 5 (Gantt, pode usar `demoHistoryG1` ou o motor real) e Fase 6 (janela).
+- **Fase 4: integrada na `main`.** Navegação, `runToEnd` com limites, `applyEdit` para as 16 `EditKind`, G5, G6, fuzz de edições. Núcleo completo (Fases 1–4).
+- **Fase 5: concluída na branch `fase-5-gantt`** (aguardando merge). `GanttRenderer.h/.cpp` (desenho único para tela/PNG/SVG no estilo das figuras 6.1–6.10 do Maziero, ícones de todas as ocorrências, legenda, exportação da simulação inteira com PNG em partes) e `GanttWidget` (rolagem, zoom, tooltip, destaque e rolagem até o instante atual, legenda fixa). `main.cpp` provisório: `sim_gui --gantt-demo <pasta>` exporta G1, G2 RM/EDF, G3, G5 e ~93 000 instantes; sem argumentos abre uma janela de demonstração. `simulador/`: 12 arquivos.
+- **Próxima:** Fase 6 (janela principal, diálogos, exportação automática ao fim).
 
 ## 1. Calendário (hoje = 23/10/2026; defesa do A = 09/11/2026)
 
@@ -183,10 +184,10 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 7. Trabalhar com o fixture de G1; ao terminar a Fase 3, trocar para histórico real de G1–G3. Gerar um histórico sintético de 100 000 ticks para testar desempenho e exportação.
 
 **Critérios de aceitação**
-- [ ] Imagens de G1, G2 (RM com perda de prazo) e G3 (sorteio, CPU desligada) corretas e conferidas contra `testes.md`.
-- [ ] Legenda com todos os ícones; CPU de cada execução legível.
-- [ ] Export de 100 000 ticks conclui sem travar; PNG/SVG abrem corretamente.
-- [ ] Visual coerente com as figuras da seção 6.4.
+- [x] Imagens de G1, G2 (RM com perda de prazo) e G3 (sorteio, CPU desligada) corretas e conferidas contra `testes.md`.
+- [x] Legenda com todos os ícones; CPU de cada execução legível.
+- [x] Export de 100 000 ticks conclui sem travar; PNG/SVG abrem corretamente.
+- [x] Visual coerente com as figuras da seção 6.4.
 
 **Commit:** `GanttRenderer: tela, PNG e SVG com legenda e ícones`.
 
