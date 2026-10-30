@@ -40,6 +40,13 @@ SystemSnapshot makeNext(const SystemSnapshot& prev);
 // Fim da simulação: toda tarefa simulada (não ignorada) está Terminated (D6).
 bool finished(const SystemSnapshot& s);
 
+// Parada sem fim: nada mais pode mudar sem uma edição do usuário. Toda tarefa
+// simulada está terminada, ou suspensa já com as 10 ativações feitas e sem
+// nenhum prazo futuro pendente (as perdas de prazo dela já foram registradas).
+// Uma suspensa nunca termina sozinha; sem esta verificação, "executar até o
+// fim" rodaria até o limite de instantes/memória à toa.
+bool stalled(const SystemSnapshot& s);
+
 // As duas metades de um instante (design.md §6). A edição manual é aplicada
 // entre elas (D28).
 void beginInstant       (SystemSnapshot& s);  // conclusões -> ativações -> perdas de prazo

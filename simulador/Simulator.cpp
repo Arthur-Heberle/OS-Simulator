@@ -82,6 +82,19 @@ bool finished(const SystemSnapshot& s) {
     return true;            // Every simulated task is terminated
 }
 
+bool stalled(const SystemSnapshot& s) {
+    bool anySuspended = false;
+    for (const Task& t : s.tasks) {
+        if (t.ignored || t.state == TaskState::Terminated) continue;
+        if (t.state != TaskState::Suspended || t.released < PERIODIC_ACTIVATION_LIMIT) return false;
+        for (const Job& job : t.jobs) {
+            if (!job.missed && job.absDeadline > s.tick) return false;  // ainda vai registrar perda de prazo
+        }
+        anySuspended = true;
+    }
+    return anySuspended;
+}
+
 /*----------------------------------------------------*/
 /*  Function: runOneTick
     responsable to manage all the CPUs updating their tick
@@ -721,6 +734,16 @@ RunSummary Simulator::runToEnd(Tick maxTicks, std::size_t maxBytes) {
     std::size_t perSnapshot = estimateSnapshotBytes(current());
     std::size_t steps = 0;
     while (!isFinished()) {
+        if (stalled(current())) {
+            std::string ids;
+            for (const Task& t : current().tasks) {
+                if (!t.ignored && t.state == TaskState::Suspended) ids += (ids.empty() ? "" : ", ") + t.id;
+            }
+            summary.message = "Simulação parada no instante " + std::to_string(current().tick) +
+                              ": só restam tarefas suspensas (" + ids + "), que não voltam sozinhas. "
+                              "Retome-as ou force o término delas.";
+            break;
+        }
         if (current().tick >= maxTicks) {
             summary.message = "Simulação interrompida no instante " + std::to_string(current().tick) +
                               ": limite de " + std::to_string(maxTicks) +
