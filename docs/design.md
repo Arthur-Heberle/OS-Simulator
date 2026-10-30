@@ -120,7 +120,7 @@ OS-Simulator/
 | D1 | Estados e filas | `NotArrived`, `Ready`, `Running`, **`Dormant`** (concluiu a ocorrência do período e espera a próxima ativação), **`Suspended`** (impedida: manual no A; mutex/E/S no B), `Terminated`. Filas lógicas: prontos (global), dormentes (ordenada por próxima ativação), suspensos; `Running` é por CPU | O professor (Q3) mandou decidir e justificar: cada fila tem uma semântica. `Dormant` não concorre à CPU até o próximo release; misturar com `Suspended` esconderia o motivo e atrapalharia o B |
 | D2 | Desenho dos estados | `Running`: sólido na cor + rótulo `CPUk`; `Ready`: só contorno, sem cor; `Suspended`: preto pontilhado; `Dormant`/`NotArrived`: só linha-base | A2.1 (ausência de cor = pronta; preto + padrão diferente = suspensa); distingue "pronta" de "fora do sistema" |
 | D3 | Tempo e snapshot | `Tick = long long`. Tick `t` cobre `[t, t+1)`. **`snapshot[k]` = estado do sistema no instante k, após processar o instante k**; descreve o que ocorre em `[k,k+1)`. Ativação, perda de prazo, preempção, sorteio ficam em `x=k`; término em `x=k+1` (aparece em `snapshot[k+1]`) | A2.2 ("momento exato") + alinha com o `SystemSnapshot` já criado (`occurrences` guardadas no snapshot do tick). O Gantt lê uma coluna por snapshot |
-| D4 | ID | `std::string` única, sem diferenciar caixa. Eixo Y em **ordem natural** (numérico se ambos numéricos; senão lexicográfico) | O B usa `BS01`, `PS02`…; A2.5 exige ordem por ID |
+| D4 | ID | `std::string` única, sem diferenciar caixa. Eixo Y em **ordem natural por blocos** (`naturalIdLess`): blocos de dígitos comparados pelo valor, blocos de texto sem caixa, número antes de texto, empate pelo texto original | O B usa `BS01`, `PS02`…; A2.5 exige ordem por ID. A regra "numérico se ambos forem números, senão texto" não é transitiva (2 < 10, 10 < 1A, 1A < 2) e quebraria o `std::sort`; por blocos dá o mesmo resultado para ids só numéricos |
 | D5 | Ocorrência (job) | `Task.jobs` é `std::vector<Job>` (frente = ocorrência corrente). Se o próximo período chega antes de a anterior terminar, a ativação é **enfileirada**, não descartada | A3.3: a tarefa que perde o prazo continua executando; descartar ativações esconderia a sobrecarga |
 | D6 | Fim | Cada periódica libera exatamente 10 ocorrências (`PERIODIC_ACTIVATION_LIMIT`) e termina quando as 10 concluem; simulação acaba quando todas as não ignoradas estão `Terminated` | A4.4 |
 | D7 | Fora do escopo do A | `periodo == 0` (aperiódica): **carregada, marcada `ignored`, não simulada, listada no relatório de carga como aviso**. `periodo < 0`: **erro do arquivo** no A (Q10). ID `BSxx/PSxx/DSxx/SSxx` com `periodo > 0`: **tarefa periódica comum** no A, sem política de servidor (Q12) | A4.4 + A3.3 ("valores menores que zero representam erros no arquivo") + respostas Q10 e Q12. No B: `ignored` deixa de valer para aperiódicas, `periodo < 0` vira esporádica (B1.3) e o prefixo do ID liga a política de servidor (B2) |
@@ -179,7 +179,7 @@ struct Job {
 struct Task {
     // --- campos do arquivo ---
     std::string id;                           // única, sem diferenciar caixa (D4)
-    std::string color = "";                   // "F0E0D0" normalizado em maiúsculas (D17)
+    std::string color = "FFFFFF";             // "F0E0D0" normalizado em maiúsculas (D17); o parser sempre define
     Tick arrival = 0, duration = 0, period = 0, deadline = 0;   // 'deadline' já com o padrão aplicado (D8)
     std::string rawEvents;                    // lista_eventos crua (D30); B: vetor de eventos
     TaskKind kind = TaskKind::Periodic;
@@ -254,7 +254,7 @@ struct ParseResult {
 enum class EditKind { SetRemaining, Suspend, Resume, ForceFinish, Remove, ActivateNow,
                       SetArrival, SetDuration, SetPeriod, SetDeadline, SetColor,
                       SetAlgorithm, SetCpuCount, SetQuantum, SetSeed, AddTask };
-struct Edit { EditKind kind; int taskIndex = -1; long long value = 0; std::string text; Task newTask; };
+struct Edit { EditKind kind = EditKind::SetRemaining; int taskIndex = -1; long long value = 0; std::string text; Task newTask; };
 struct EditResult { bool ok = false; std::string message; };   // message explica a recusa (A3.4)
 ```
 
@@ -330,7 +330,7 @@ uint64_t    tieHash(uint64_t seed, Tick now, int taskIndex);            // split
 
 ## 8. Parser (A3.3.x)
 
-`ParseResult parseConfig(const std::string& text)` e `std::string serializeConfig(const Config&)` (ida e volta).
+`parser::parseConfig(const std::string& text)` e `parser::serializeConfig(const Config&)` (ida e volta), no `namespace parser`. Limites próprios do parser em `Parser.h`: `MAX_QUANTUM` (10⁶) e `MAX_FIELD_VALUE` (10⁹).
 
 **Pré-processamento:** remover BOM UTF-8; normalizar CRLF/CR → LF; separar linhas **guardando o número original**; descartar linhas vazias ou só com espaços; 1ª linha útil = sistema; demais = tarefas. Em cada linha: dividir por `;`, preservando campos vazios; remover `;` final; `trim` em cada campo; comparar textos sem diferenciar caixa.
 
@@ -353,15 +353,16 @@ uint64_t    tieHash(uint64_t seed, Tick now, int taskIndex);            // split
 ```cpp
 class Simulator {
 public:
-    Simulator();                                    // registra escalonadores embutidos
+    Simulator();                                    // history com 1 snapshot vazio (o registro de escalonadores é automático, §7)
     bool load(const Config&);                       // zera e gera history[0]
     void reset();
     bool stepForward();                             // cursor++ se já existe; senão calcula; false se terminou
     bool stepBack();                                // cursor-- (O(1)); false no instante 0
     bool jumpTo(Tick tick);
     RunSummary runToEnd(Tick maxTicks = DEFAULT_MAX_TICKS);   // A1.5.3; para por limite de ticks/memória, com mensagem
+    // RunSummary { bool finished; Tick ticks; std::string message; } — DEFAULT_MAX_TICKS = 2 000 000
     EditResult applyEdit(const Edit&);              // valida; se ok, trunca o futuro e recalcula (D15, D28)
-    bool finished() const;
+    bool isFinished() const;                        // finished(current())
     const SystemSnapshot& current() const;          // history[cursor]
     const std::vector<SystemSnapshot>& history() const;
     size_t cursor() const;
