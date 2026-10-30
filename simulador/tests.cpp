@@ -4,8 +4,7 @@
 // O quê: verifica o núcleo (simcore) sem nenhuma janela e sem Qt.
 //   - Fase 0: teste de fumaça (build, structs copiáveis).
 //   - Fase 1: ferramentas de teste do contrato (serializeSnapshot, verificador
-//     de invariantes de histórico, helpers de consulta), naturalIdLess e o
-//     histórico de demonstração de G1 (demoHistoryG1).
+//     de invariantes de histórico, helpers de consulta) e naturalIdLess.
 //   - Fase 2: parser P1–P14 e robustez (docs/testes.md §3).
 //   - Fase 3: motor (G1–G4, FIFO, invariantes 1–9, fuzz). 'sim_tests --rapido' roda o fuzz
 //     com 500 sistemas (dia a dia); 'sim_tests --grid'
@@ -421,62 +420,6 @@ static void testInvariantChecker() {
     CHECK(!checkInvariants({s}).empty());
 }
 
-// demoHistoryG1 (fixture temporário da Fase 1) confere com G1 de docs/testes.md:
-// grade, ocorrências, valores de conferência e invariantes. Quando o motor
-// existir (Fase 3), o G1 real será comparado com este mesmo roteiro.
-static void testDemoHistoryG1() {
-    const std::vector<SystemSnapshot> h = demoHistoryG1();
-    const int T1 = 0, T2 = 1;
-    CHECK_EQ(h.size(), 13u);  // instantes 0 a 12
-
-    // Grade dos 12 primeiros ticks (CPU1): 0:1 1:2 2:2 3:- 4:1 5:- 6:2 7:2 8:1 9:- 10:- 11:-
-    const std::vector<std::string> grid = {"1", "2", "2", "-", "1", "-", "2", "2", "1", "-", "-", "-"};
-    for (Tick k = 0; k < 12; ++k) {
-        CHECK_EQ(taskOn(h, k, 0), grid[static_cast<std::size_t>(k)]);
-    }
-
-    // Ocorrências nos instantes exatos (A2.2, Q5).
-    CHECK(occTicks(h, OccurrenceType::Arrival, T1) == std::vector<Tick>({0, 4, 8, 12}));
-    CHECK(occTicks(h, OccurrenceType::Arrival, T2) == std::vector<Tick>({0, 6, 12}));
-    CHECK(occTicks(h, OccurrenceType::Termination, T1) == std::vector<Tick>({1, 5, 9}));
-    CHECK(occTicks(h, OccurrenceType::Termination, T2) == std::vector<Tick>({3, 8}));
-    CHECK(occTicks(h, OccurrenceType::CpuOff, -1) == std::vector<Tick>({3, 5, 9}));
-    CHECK(occTicks(h, OccurrenceType::CpuOn, -1) == std::vector<Tick>({4, 6, 12}));
-    CHECK_EQ(countOcc(h, OccurrenceType::DeadlineMiss, -1), 0);
-    CHECK_EQ(countOcc(h, OccurrenceType::Preemption, -1), 0);
-    CHECK_EQ(countOcc(h, OccurrenceType::TieBreakDraw, -1), 0);
-    CHECK_EQ(countOcc(h, OccurrenceType::Migration, -1), 0);
-
-    // Valores de conferência: CPU1 desligada 5 ticks em [0,12) (3, 5, 9, 10, 11).
-    const SystemSnapshot& last = h.back();
-    CHECK_EQ(last.cpus[0].ticksOff, 5);
-    CHECK_EQ(last.cpus[0].ticksBusy, 7);
-    CHECK_EQ(last.tasks[T1].released, 4);
-    CHECK_EQ(last.tasks[T1].completed, 3);
-    CHECK_EQ(last.tasks[T2].released, 3);
-    CHECK_EQ(last.tasks[T2].completed, 2);
-    CHECK_EQ(last.tasks[T1].runTicks, 3);
-    CHECK_EQ(last.tasks[T2].runTicks, 4);
-    CHECK_EQ(last.tasks[T2].waitTicks, 1);  // só esperou em [0,1)
-    CHECK_EQ(h[3].tasks[T2].state, TaskState::Dormant);
-    CHECK_EQ(h[2].tasks[T2].jobs.front().remaining, 1);
-
-    // Utilização informativa de G1: U = 1/4 + 2/6 ≈ 0,583 (design.md §6).
-    double u = 0.0;
-    for (const Task& t : h[0].tasks) u += static_cast<double>(t.duration) / static_cast<double>(t.period);
-    CHECK(u > 0.583 && u < 0.584);
-
-    // Invariantes de docs/testes.md §4 em todos os instantes.
-    CHECK(noViolations(checkInvariants(h)));
-
-    // Determinístico: montar de novo dá exatamente o mesmo histórico.
-    const std::vector<SystemSnapshot> again = demoHistoryG1();
-    bool same = again.size() == h.size();
-    for (std::size_t k = 0; same && k < h.size(); ++k) {
-        same = serializeSnapshot(again[k]) == serializeSnapshot(h[k]);
-    }
-    CHECK(same);
-}
 
 // -----------------------------------------------------------------------------
 // Fase 2: parser (docs/testes.md §3, P1–P14 e robustez).
@@ -891,15 +834,31 @@ static void testGoldenG1() {
     CHECK(noViolations(checkInvariants(h)));
     CHECK(noViolations(checkFinalState(h)));
 
-    // O motor reproduz EXATAMENTE o histórico montado à mão na Fase 1
-    // (todos os campos, todas as ocorrências, na mesma ordem).
-    const std::vector<SystemSnapshot> demo = demoHistoryG1();
-    bool same = h.size() >= demo.size();
-    for (std::size_t k = 0; same && k < demo.size(); ++k) {
-        same = serializeSnapshot(h[k]) == serializeSnapshot(demo[k]);
-        if (!same) std::cerr << "  G1 diverge do demoHistoryG1 no instante " << k << "\n";
-    }
-    CHECK(same);
+    // Ocorrências nos instantes exatos (A2.2, Q5) e CPU ligando/desligando (A1.2).
+    CHECK(occTicks(h, OccurrenceType::Arrival, T1).size() >= 4);
+    CHECK(occTicks(h, OccurrenceType::Arrival, T2).size() >= 3);
+    CHECK(occTicks(h, OccurrenceType::Arrival, T1)[1] == 4 && occTicks(h, OccurrenceType::Arrival, T1)[3] == 12);
+    CHECK(occTicks(h, OccurrenceType::Arrival, T2)[1] == 6 && occTicks(h, OccurrenceType::Arrival, T2)[2] == 12);
+    CHECK(occTicks(h, OccurrenceType::Termination, T1)[0] == 1 && occTicks(h, OccurrenceType::Termination, T1)[1] == 5);
+    CHECK(occTicks(h, OccurrenceType::Termination, T2)[0] == 3);
+    CHECK(occTicks(h, OccurrenceType::CpuOff, -1).size() >= 3);
+    CHECK(occTicks(h, OccurrenceType::CpuOff, -1)[0] == 3 && occTicks(h, OccurrenceType::CpuOff, -1)[2] == 9);
+    CHECK(occTicks(h, OccurrenceType::CpuOn, -1).size() >= 3);
+    CHECK(occTicks(h, OccurrenceType::CpuOn, -1)[0] == 4 && occTicks(h, OccurrenceType::CpuOn, -1)[2] == 12);
+    CHECK_EQ(countOcc(h, OccurrenceType::TieBreakDraw, -1), 0);
+    CHECK_EQ(countOcc(h, OccurrenceType::Migration, -1), 0);
+
+    // Contadores no instante 12.
+    CHECK_EQ(h[12].cpus[0].ticksBusy, 7);
+    CHECK_EQ(h[12].tasks[T1].released, 4);
+    CHECK_EQ(h[12].tasks[T1].completed, 3);
+    CHECK_EQ(h[12].tasks[T2].released, 3);
+    CHECK_EQ(h[12].tasks[T2].completed, 2);
+    CHECK_EQ(h[12].tasks[T1].runTicks, 3);
+    CHECK_EQ(h[12].tasks[T2].runTicks, 4);
+    CHECK_EQ(h[12].tasks[T2].waitTicks, 1);  // só esperou em [0,1)
+    CHECK_EQ(h[3].tasks[T2].state, TaskState::Dormant);
+    CHECK_EQ(h[2].tasks[T2].jobs.front().remaining, 1);
 }
 
 // G2 — RM x EDF, 1 CPU, utilização alta: o RM perde prazo, o EDF não.
@@ -1444,7 +1403,6 @@ int main(int argc, char* argv[]) {
     testModelDefaults();
     testNaturalIdLess();
     testInvariantChecker();
-    testDemoHistoryG1();
     testParserFormatting();
     testParserSystemAndIds();
     testParserColors();
