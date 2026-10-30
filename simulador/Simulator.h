@@ -52,7 +52,9 @@ bool stalled(const SystemSnapshot& s);
 void beginInstant       (SystemSnapshot& s);  // conclusões -> ativações -> perdas de prazo
 void scheduleAndDispatch(SystemSnapshot& s);  // escalonador -> chooseTasks -> dispatch
 
-// Etapas, na ordem em que makeNext as chama (ordem fixa: design.md §6, Q-A10).
+// Etapas, na ordem em que makeNext as chama.
+// PERGUNTA EM ABERTO Q-A10: qual a ordem dos eventos dentro de um tick?
+// Padrão adotado: a ordem fixa abaixo (design.md §6).
 void runOneTick        (SystemSnapshot& s);  // 1. executa [t, t+1) com as CPUs decididas em t
 void finishActivations (SystemSnapshot& s);  // 2. conclusões no instante t+1
 void releaseActivations(SystemSnapshot& s);  // 3. ativações

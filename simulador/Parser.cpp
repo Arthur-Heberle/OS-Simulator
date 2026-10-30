@@ -435,6 +435,8 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
         color = nextFreeColor(usedColors, colorCursor);
         addMessage(result, MsgCode::AutoColor, {line, task.id, color});
     } else if (usedColors.count(color) > 0) {
+        // PERGUNTA EM ABERTO Q-A7: cor repetida no arquivo é erro ou aviso?
+        // Padrão adotado: aviso, e a tarefa recebe outra cor livre (D17).
         std::string firstLine = std::to_string(usedColors.at(color));
         std::string newColor = nextFreeColor(usedColors, colorCursor);
         addMessage(result, MsgCode::DuplicateColor, {line, color, task.id, firstLine, newColor});

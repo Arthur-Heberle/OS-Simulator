@@ -38,6 +38,8 @@ inline constexpr int MAX_CPUS = 64;
 using Tick = long long;
 
 // Uma tarefa periódica termina depois de concluir 10 ocorrências [A4.4] (D6).
+// PERGUNTA EM ABERTO Q-A8: "executar 10 vezes" = 10 ocorrências concluídas?
+// Padrão adotado: libera 10 ocorrências e termina quando as 10 concluem (D6).
 constexpr int PERIODIC_ACTIVATION_LIMIT = 10;
 
 // Estados da tarefa (D1). Cada estado tem uma semântica própria (resposta do
@@ -77,6 +79,8 @@ struct Task {
     Tick duration = 0;             // Total execution time needed (por ocorrência)
     Tick period = 0;               // Activation period (> 0 periodic, 0 aperiodic) [B1.2: guardado no TCB]
     Tick deadline = 0;             // Deadline, counted from each activation (vazio/0 no arquivo => período, D8)
+    // PERGUNTA EM ABERTO Q-A9: quais eventos (mutex, E/S) o Projeto A deve simular?
+    // Padrão adotado: só guardar o texto, sem simular (A3.3.5 diz que é do B) (D30).
     std::string rawEvents;         // lista_eventos crua (D30); o Projeto B interpreta
     TaskKind kind = TaskKind::Periodic;     // tipo da tarefa; no A só Periodic é simulada (A4.4, D7)
     ServerType server = ServerType::None;   // tipo de servidor (B2); no A o prefixo do id não é interpretado (Q12)
@@ -114,7 +118,9 @@ inline bool isCandidate(const Task& t) {
 }
 
 // Ordem natural de IDs: decide a ordem das linhas do Gantt [A2.5] e das
-// tabelas (D4). O id é texto (o Projeto B usa "BS01"), mas "2" deve vir
+// tabelas (D4).
+// PERGUNTA EM ABERTO Q-A6: o id é sempre numérico? Padrão adotado: id é texto,
+// em ordem natural (D4). O id é texto (o Projeto B usa "BS01"), mas "2" deve vir
 // antes de "10". Por isso a comparação é feita por BLOCOS: cada id é lido
 // como uma sequência de blocos de dígitos e de não-dígitos, e os blocos são
 // comparados em ordem:
