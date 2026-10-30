@@ -33,9 +33,9 @@ enum class MsgCode {
     TaskMissingField,
     TaskInvalidValue,
     TaskDuplicateId,
-    AperiodicIgnored,
 
     // Warnings: a default value is used or the item is ignored
+    AperiodicIgnored,
     SystemMissingValue,
     SystemInvalidValue,
     UnknownAlgorithm,
@@ -49,32 +49,33 @@ struct MessageInfo {
     std::string_view text;  // each "{}" is replaced by an argument, in order
 };
 
+// Textos mostrados ao usuário: em português, sempre com o motivo [A3.3.6, A5].
 inline const std::map<MsgCode, MessageInfo> MESSAGES = {
     {MsgCode::EmptyFile,
-     {Severity::Error, "Configuration file is empty."}},
+     {Severity::Error, "O arquivo de configuração está vazio."}},
     {MsgCode::NoValidTasks,
-     {Severity::Error, "No valid task found. At least one periodic task is required."}},
+     {Severity::Error, "Nenhuma tarefa válida encontrada. É necessária ao menos uma tarefa periódica."}},
     {MsgCode::TaskMissingField,
-     {Severity::Error, "Line {}: task cannot be added. Reason: field '{}' is missing."}},
+     {Severity::Error, "Linha {}: a tarefa não pode ser adicionada. Motivo: o campo '{}' está ausente."}},
     {MsgCode::TaskInvalidValue,
-     {Severity::Error, "Line {}: task cannot be added. Reason: field '{}' has invalid value '{}' ({})."}},
+     {Severity::Error, "Linha {}: a tarefa não pode ser adicionada. Motivo: o campo '{}' tem o valor inválido '{}' ({})."}},
     {MsgCode::TaskDuplicateId,
-     {Severity::Error, "Line {}: task cannot be added. Reason: id '{}' is already used on line {}."}},
-   
+     {Severity::Error, "Linha {}: a tarefa não pode ser adicionada. Motivo: o id '{}' já é usado na linha {}."}},
+
     {MsgCode::AperiodicIgnored,
-     {Severity::Warning, "Line {}: task '{}' is aperiodic (period 0) and will be ignored in Project A."}},
+     {Severity::Warning, "Linha {}: a tarefa '{}' é aperiódica (período 0) e será ignorada no Projeto A."}},
     {MsgCode::SystemMissingValue,
-     {Severity::Warning, "Line {}: '{}' not provided. Using default '{}'."}},
+     {Severity::Warning, "Linha {}: '{}' não informado. Usando o padrão '{}'."}},
     {MsgCode::SystemInvalidValue,
-     {Severity::Warning, "Line {}: invalid value '{}' for '{}'. Using default '{}'."}},
+     {Severity::Warning, "Linha {}: valor inválido '{}' para '{}'. Usando o padrão '{}'."}},
     {MsgCode::UnknownAlgorithm,
-     {Severity::Warning, "Line {}: unknown scheduling algorithm '{}'. Using default '{}'."}},
+     {Severity::Warning, "Linha {}: algoritmo de escalonamento desconhecido '{}'. Usando o padrão '{}'."}},
     {MsgCode::InvalidColor,
-     {Severity::Warning, "Line {}: invalid color '{}' for task '{}'. Using default '{}'."}},
-     {MsgCode::DuplicateColor,
-     {Severity::Warning, "Line {}: color '{}' of task '{}' is already used on line {}. Using '{}' instead."}},
+     {Severity::Warning, "Linha {}: cor inválida '{}' na tarefa '{}'. Usando '{}'."}},
+    {MsgCode::DuplicateColor,
+     {Severity::Warning, "Linha {}: a cor '{}' da tarefa '{}' já é usada na linha {}. Usando '{}' no lugar."}},
     {MsgCode::ExtraFields,
-     {Severity::Warning, "Line {}: extra fields were ignored."}},
+     {Severity::Warning, "Linha {}: campos a mais foram ignorados."}},
 };
 
 // ---------------------------------------------------------------------------

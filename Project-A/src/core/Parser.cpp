@@ -36,9 +36,9 @@ void addMessage(ParseResult& result, MsgCode code, const std::vector<std::string
     std::string text = formatMessage(info.text, args);
 
     if (info.severity == Severity::Error) {
-        result.errors.push_back("[ERROR] " + text);
+        result.errors.push_back("[ERRO] " + text);
     } else {
-        result.warnings.push_back("[WARNING] " + text);
+        result.warnings.push_back("[AVISO] " + text);
     }
 }
 
@@ -144,7 +144,7 @@ void parseSystemLine(const std::vector<std::string>& fields, int lineNumber, Par
     std::string algorithm = toUpper(rawAlgorithm);
 
     if (algorithm.empty()) {
-        addMessage(result, MsgCode::SystemMissingValue, {line, "algorithm", config.algorithm});
+        addMessage(result, MsgCode::SystemMissingValue, {line, "algoritmo_escalonamento", config.algorithm});
     } else if (VALID_ALGORITHMS.count(algorithm) == 0) {
         addMessage(result, MsgCode::UnknownAlgorithm, {line, rawAlgorithm, config.algorithm});
     } else {
@@ -155,7 +155,7 @@ void parseSystemLine(const std::vector<std::string>& fields, int lineNumber, Par
     readSystemInt(fields, 1, "quantum", 1, MAX_QUANTUM, config.quantum, lineNumber, result);
 
     // Field 2: number of CPUs (between 1 and MAX_CPUS) [RG2]
-    readSystemInt(fields, 2, "cpu count", 1, MAX_CPUS, config.cpuCount, lineNumber, result);
+    readSystemInt(fields, 2, "qtde_cpus", 1, MAX_CPUS, config.cpuCount, lineNumber, result);
 
     if (fields.size() > 3) {
         addMessage(result, MsgCode::ExtraFields, {line});
@@ -214,7 +214,7 @@ bool readTaskInt(const std::vector<std::string>& fields, std::size_t index,
         return false;
     }
     if (!parseInt(raw, value) || value < minValue) {
-        std::string reason = "must be an integer >= " + std::to_string(minValue);
+        std::string reason = "deve ser um inteiro >= " + std::to_string(minValue);
         addMessage(result, MsgCode::TaskInvalidValue, {line, name, raw, reason});
         return false;
     }
@@ -244,10 +244,11 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
     }
 
     // Fields 2 to 5: integers
-    ok = readTaskInt(fields, 2, "arrival",  0, task.arrival,  lineNumber, result) && ok;
-    ok = readTaskInt(fields, 3, "duration", 1, task.duration, lineNumber, result) && ok;
-    ok = readTaskInt(fields, 4, "period",   0, task.period,   lineNumber, result) && ok;  // < 0 is an error [A3.3]
-    ok = readTaskInt(fields, 5, "deadline", 1, task.deadline, lineNumber, result) && ok;
+    // Nomes dos campos como no formato do arquivo [A3.3], para o usuário achar o erro.
+    ok = readTaskInt(fields, 2, "ingresso", 0, task.arrival,  lineNumber, result) && ok;
+    ok = readTaskInt(fields, 3, "duracao",  1, task.duration, lineNumber, result) && ok;
+    ok = readTaskInt(fields, 4, "periodo",  0, task.period,   lineNumber, result) && ok;  // < 0 is an error [A3.3]
+    ok = readTaskInt(fields, 5, "prazo",    1, task.deadline, lineNumber, result) && ok;
 
     // Field 6: event list (optional, kept as raw text for Project B)
     // task.rawEvents = fieldAt(fields, 6);
