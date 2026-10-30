@@ -20,8 +20,8 @@ Cole no Claude Code, uma fase por vez:
 - **Fase 3: integrada na `main`.** Motor completo (§6), G1–G4, G4b, FIFO, invariantes 1–9, fuzz de 10 000 sistemas; `sim_tests --grid` e `--rapido`.
 - **Fase 4: integrada na `main`.** Navegação, `runToEnd` com limites, `applyEdit` para as 16 `EditKind`, G5, G6, fuzz de edições. Núcleo completo (Fases 1–4).
 - **Fase 5: integrada na `main`.** `GanttRenderer` (tela/PNG/SVG no estilo do Maziero) e `GanttWidget`.
-- **Fase 6: concluída na branch `fase-6-janela`** (aguardando merge). `MainWindow.h/.cpp` (Tela 1), `Dialogs.h` (Telas 2–6), `main.cpp` definitivo (`--exportar`), `exemplo_rm.txt`, `exemplo_edf.txt`; núcleo: `stalled()` (runToEnd para quando só restam suspensas). `simulador/`: 17 arquivos (o 18º é o PDF das telas, Fase 8). `sim_tests`: 1299 checks.
-- **Próxima:** Fase 7 (endurecimento: checklist-A 100%, itens manuais restantes, remover `demoHistoryG1`, revisar comentários e mensagens).
+- **Fase 6: integrada na `main`.** `MainWindow.h/.cpp` (Tela 1), `Dialogs.h` (Telas 2–6), `main.cpp` definitivo (`--exportar`), `exemplo_rm.txt`, `exemplo_edf.txt`; núcleo: `stalled()` (runToEnd para quando só restam suspensas). `simulador/`: 17 arquivos (o 18º é o PDF das telas, Fase 8). `sim_tests`: 1299 checks.
+- **Fase 7: em andamento** (branch `fase-7-endurecimento`, 30/10/2026). Feito: `demoHistoryG1` removido (a cobertura passou para `testGoldenG1`), marcadores `PERGUNTA EM ABERTO` (Q-A6 a Q-A11), `testStepSpeed` (passo com 100 tarefas ≈ 0,02 ms) e `checklist-A.md` marcado com evidências. Falta: testes manuais (pendrive, outra partição, máquina sem Qt, zoom/rolagem com o mouse) e revisão de comentários e mensagens (RG6, A5). Decidido não fazer o escalonador em DLL (A4.2 "ideal").
 
 ## 1. Calendário (hoje = 23/10/2026; defesa do A = 09/11/2026)
 
