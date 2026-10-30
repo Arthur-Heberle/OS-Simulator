@@ -100,7 +100,9 @@ std::string fieldAt(const std::vector<std::string>& fields, std::size_t index) {
 
 // Converts text to int. Returns false if the WHOLE text is not an integer
 // (so "12abc" is rejected, unlike std::stoi). Never throws.
-bool parseInt(const std::string& text, int& out) {
+// Template: serve para int (linha do sistema) e Tick (campos de tempo da tarefa).
+template <typename Int>
+bool parseInt(const std::string& text, Int& out) {
     if (text.empty()) {
         return false;
     }
@@ -201,11 +203,11 @@ std::string nextFreeColor(const std::map<std::string, int>& usedColors) {
 // Reads an integer task field. Returns false (and adds an error) if it is
 // missing, not a number, or smaller than minValue.
 bool readTaskInt(const std::vector<std::string>& fields, std::size_t index,
-                 const std::string& name, int minValue,
-                 int& target, int lineNumber, ParseResult& result) {
+                 const std::string& name, Tick minValue,
+                 Tick& target, int lineNumber, ParseResult& result) {
     std::string line = std::to_string(lineNumber);
     std::string raw = fieldAt(fields, index);
-    int value = 0;
+    Tick value = 0;
 
     if (raw.empty()) {
         addMessage(result, MsgCode::TaskMissingField, {line, name});

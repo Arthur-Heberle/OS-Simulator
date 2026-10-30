@@ -80,7 +80,7 @@ void Simulator::runOneTick(SystemSnapshot& s) const {
             cpu.ticksOff++;
         } 
         else{
-            s.tasks[cpu.taskIndex].remaining--;
+            s.tasks[cpu.taskIndex].jobs.front().remaining--;   // consome a ocorrência corrente (D5)
             cpu.quantumUsed++;
         }
     }

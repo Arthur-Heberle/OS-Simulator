@@ -3,10 +3,10 @@
 
 // Priority key of a task for one algorithm: the smaller, the higher the priority.
 // This is the ONLY thing that changes between algorithms. [A4.2]
-using KeyFn = int (*)(const Task&);
+using KeyFn = Tick (*)(const Task&);
 
-static int rmKey (const Task& t) { return t.period; }            // RM: fixed priority
-static int edfKey(const Task& t) { return t.absoluteDeadline; }  // EDF: dynamic priority
+static Tick rmKey (const Task& t) { return t.period; }                     // RM: fixed priority
+static Tick edfKey(const Task& t) { return t.jobs.front().absDeadline; }   // EDF: dynamic priority (prazo absoluto da ocorrência corrente)
 
 // Compares two tasks using the algorithm key and then the tie-break criteria [A4.3].
 // Returns -1 if "a" goes first, 1 if "b" goes first and 0 if they are still tied.
@@ -15,8 +15,8 @@ static int compareTasks(const Task& a, const Task& b, KeyFn key) {
     if (key(a) != key(b)) return key(a) < key(b) ? -1 : 1;
 
     // (1) The task that was already executing goes first (avoids needless switches)
-    bool aRunning = a.state == TaskState::Executing;
-    bool bRunning = b.state == TaskState::Executing;
+    bool aRunning = a.state == TaskState::Running;
+    bool bRunning = b.state == TaskState::Running;
     if (aRunning != bRunning) return aRunning ? -1 : 1;
 
     // (2) Smaller deadline (relative: the file field, see CLAUDE.md pending item 5)
@@ -37,7 +37,7 @@ static std::vector<int> candidates(const SystemSnapshot& s) {
     std::vector<int> result;
     for (int i = 0; i < static_cast<int>(s.tasks.size()); i++) {
         TaskState state = s.tasks[i].state;
-        if (state == TaskState::Ready || state == TaskState::Executing)
+        if (state == TaskState::Ready || state == TaskState::Running)
             result.push_back(i);
     }
     return result;
