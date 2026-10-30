@@ -269,15 +269,16 @@ Funções-ajuda livres (inline em `Model.h` ou `Simulator.h`): `const Job* curre
 ```cpp
 SystemSnapshot makeNext(const SystemSnapshot& prev) {
     SystemSnapshot s = prev;  s.occurrences.clear();
-    executeTick(s);           // 1. consome 1 tick: Running.remaining--, runTicks++, waitTicks++ (Ready),
+    runOneTick(s);            // consome 1 tick: Running.remaining--, runTicks++, waitTicks++ (Ready),
                               //    CPU.ticksBusy/ticksOff, quantumUsed
     s.tick = prev.tick + 1;
-    beginInstant(s);          // 2. conclusões -> 3. ativações -> 4. perdas de prazo
-    scheduleAndDispatch(s);   // 5. escalonar -> 6. despachar -> 7. readyQueue
+    processInstant(s);        // finishActivations -> releaseActivations -> checkDeadlines
+                              //    -> escalonador (PriorityGroups) -> chooseTasks -> dispatch
     return s;
 }
-// instante 0: s.tick=0; initState(config); beginInstant(s); scheduleAndDispatch(s);
+// instante 0: initState(config) monta o estado com tick = 0 e chama processInstant(s).
 ```
+Nomes no código (`Simulator.cpp`): `runOneTick` (passo de execução), `finishActivations` (1), `releaseActivations` (2), `checkDeadlines` (3), `chooseTasks` (4, sorteio), `dispatch` (5 e 6); `processInstant` encadeia os passos 1–6.
 
 **Ordem fixa dentro de um instante** (responde Q-A10):
 
@@ -288,7 +289,7 @@ SystemSnapshot makeNext(const SystemSnapshot& prev) {
 5. **Despacho** (`chosen` em ordem de escolha):
    a. `Running` fora de `chosen` ⇒ `Ready`, libera CPU, `preemptions++`, `Preemption`.
    b. `chosen` já `Running` ⇒ permanece (mesma CPU).
-   c. `chosen` não `Running` ⇒ CPU livre: preferir `lastCpu` se livre, senão a de menor índice; `state=Running`; `Dispatch`; se `lastCpu != -1 && lastCpu != cpu` ⇒ `Migration`, `migrations++`; `firstStart` se `-1`; `quantumUsed=0`; se a decisão teve `tieDraw` ⇒ `TieBreakDraw`.
+   c. `chosen` não `Running` ⇒ CPU livre, em **duas passadas**: primeiro as que podem voltar à `lastCpu` (se livre); depois as demais, na CPU livre de menor índice (assim uma tarefa sem afinidade não ocupa a CPU de outra e força uma migração); `state=Running`; `Dispatch`; se `lastCpu != -1 && lastCpu != cpu` ⇒ `Migration`, `migrations++`; `firstStart` se `-1`; `quantumUsed=0`; se a decisão teve `tieDraw` ⇒ `TieBreakDraw`.
    d. CPU sem tarefa ⇒ `on=false` (e `CpuOff` se estava ligada); CPU com tarefa e `on==false` ⇒ `on=true` + `CpuOn`.
 6. `readyQueue` = tarefas `Ready` ordenadas por `(jobs.front().release, índice)`.
 
