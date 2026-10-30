@@ -1,3 +1,28 @@
+// =============================================================================
+// Parser.h — Leitura do arquivo de configuração (texto -> Config) e o caminho
+// inverso (Config -> texto).
+//
+// O quê: parser::parseConfig lê o formato do enunciado [A3.3]
+//     algoritmo_escalonamento;quantum;qtde_cpus
+//     id;cor;ingresso;duracao;periodo;prazo;lista_eventos
+// e devolve a Config com os padrões aplicados [A3.2] mais TODOS os erros e
+// avisos encontrados, cada um com linha, campo, valor e motivo [A3.3.6].
+// parser::serializeConfig faz o caminho inverso (salvar a configuração).
+//
+// Por quê assim:
+//   - Recebe o TEXTO, não o caminho (D29): quem abre o arquivo é a interface
+//     (QFile aceita qualquer caminho, pendrive e acentos, A3.3.4) e os testes
+//     passam strings, sem criar arquivos.
+//   - Erro x aviso (D18): erro = não há padrão possível, nada é carregado;
+//     aviso = usa um padrão ou ignora algo, e a simulação roda. Na dúvida,
+//     aceitar com aviso: arquivo válido nunca pode falhar [A3.3.7].
+//   - Severidade e texto de cada mensagem ficam numa tabela (MsgCode ->
+//     MESSAGES): mudar uma regra, se o professor responder diferente, é
+//     mexer numa linha.
+//
+// Requisitos: A3.2, A3.3, A3.3.1–A3.3.7, A4.1, A4.4, A5.
+// Decisões: D4, D7, D8, D12, D17, D18, D29, D30; respostas Q10 e Q12.
+// =============================================================================
 #pragma once
 
 #include <cstdint>

@@ -1,3 +1,20 @@
+// =============================================================================
+// Parser.cpp — Implementação do parser do arquivo de configuração (Parser.h).
+//
+// Fluxo de parseConfig:
+//   1. normalizeText: tira o BOM e troca CRLF/CR por LF;
+//   2. lê linha a linha contando TODAS as linhas (as mensagens apontam a linha
+//      real do arquivo); linhas em branco são ignoradas [A3.3.6];
+//   3. a 1ª linha útil é a do sistema (parseSystemLine); as demais são tarefas
+//      (parseTaskLine), cada uma validada por inteiro para mostrar todos os
+//      erros de uma vez;
+//   4. regras do arquivo como um todo (mínimo de 2 linhas, alguma tarefa
+//      simulável).
+// serializeConfig escreve a Config de volta no mesmo formato.
+//
+// Requisitos e decisões: ver o cabeçalho de Parser.h.
+// =============================================================================
+
 #include "Parser.h"
 #include "Scheduler.h"   // registro de algoritmos [A4.2]
 
