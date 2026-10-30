@@ -66,6 +66,32 @@ std::string toUpper(std::string s) {
     return s;
 }
 
+// Prepara o texto do arquivo para ser lido linha a linha (design.md §8, D18):
+// - remove o BOM UTF-8 do início (o Bloco de Notas do Windows pode gravá-lo;
+//   sem isso "EDF" viraria "\xEF\xBB\xBFEDF", um algoritmo desconhecido);
+// - troca CRLF (Windows) e CR isolado (Mac antigo) por LF, para std::getline
+//   separar as linhas certo em qualquer caso.
+// Arquivo que obedece ao formato nunca pode falhar ao carregar [A3.3.7].
+std::string normalizeText(const std::string& text) {
+    std::size_t start = 0;
+    if (text.compare(0, 3, "\xEF\xBB\xBF") == 0) {
+        start = 3;
+    }
+    std::string out;
+    out.reserve(text.size());
+    for (std::size_t i = start; i < text.size(); ++i) {
+        if (text[i] == '\r') {
+            out += '\n';
+            if (i + 1 < text.size() && text[i + 1] == '\n') {
+                ++i;  // CRLF vira um único LF
+            }
+        } else {
+            out += text[i];
+        }
+    }
+    return out;
+}
+
 // Splits a line by ';'. Empty fields are KEPT, because the position of a
 // field defines its meaning (";2;10" means: no algorithm, quantum 2, 10 CPUs).
 std::vector<std::string> splitFields(const std::string& line) {
@@ -231,16 +257,20 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
                      // other fields so the user sees all errors at once
 
     // Field 0: id (required and unique)
+    // Unicidade sem diferenciar maiúsculas [A3.3.2] (D4): "a1" e "A1" são o
+    // mesmo id. O mapa usa a forma em maiúsculas; a tarefa guarda o id como
+    // foi digitado, para mostrar ao usuário.
     task.id = fieldAt(fields, 0);
+    std::string idKey = toUpper(task.id);
     if (task.id.empty()) {
         addMessage(result, MsgCode::TaskMissingField, {line, "id"});
         ok = false;
-    } else if (usedIds.count(task.id) > 0) {
+    } else if (usedIds.count(idKey) > 0) {
         addMessage(result, MsgCode::TaskDuplicateId,
-                   {line, task.id, std::to_string(usedIds.at(task.id))});
+                   {line, task.id, std::to_string(usedIds.at(idKey))});
         ok = false;
     } else {
-        usedIds[task.id] = lineNumber;
+        usedIds[idKey] = lineNumber;
     }
 
     // Fields 2 to 5: integers
@@ -265,6 +295,9 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
     // reserve a color. Uppercase so "ff0000" and "FF0000" are the same [A3.3.2].
     std::string rawColor = fieldAt(fields, 1);
     std::string color = toUpper(rawColor);
+    if (!color.empty() && color[0] == '#') {
+        color.erase(0, 1);  // "#FF0000" é a forma comum de escrever cor: tolerada (D17)
+    }
 
     if (!isValidHexColor(color)) {
         color = nextFreeColor(usedColors);
@@ -288,7 +321,7 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
 
 ParseResult parser::parseConfig(const std::string& text) {
     ParseResult result;
-    std::stringstream stream(text);
+    std::stringstream stream(normalizeText(text));
     std::string line;
     int lineNumber = 0;
     bool systemLineRead = false;
