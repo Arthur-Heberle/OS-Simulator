@@ -24,6 +24,9 @@ simulador/dist/
 teste_qt.png
 teste_qt.svg
 
+# Preferências pessoais de cada integrante para o Claude Code (CLAUDE.md, "Como trabalhar").
+CLAUDE.local.md
+
 # Arquivos de IDE.
 CMakeLists.txt.user
 .vs/
