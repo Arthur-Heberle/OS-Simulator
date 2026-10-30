@@ -125,10 +125,13 @@ endif()
 if(BUILD_GUI AND Qt6_FOUND)
     message(STATUS "Qt ${Qt6_VERSION} encontrado: a interface sim_gui será compilada.")
 
-    # Fontes da interface. GanttRenderer.* (Fase 5): desenho único do Gantt
-    # para tela, PNG e SVG. A Fase 6 acrescenta MainWindow.* e Dialogs.h.
+    # Fontes da interface: janela principal (Tela 1), diálogos (Telas 2 a 6)
+    # e o desenho único do Gantt para tela, PNG e SVG (A2.4).
     add_executable(sim_gui
         main.cpp
+        MainWindow.cpp
+        MainWindow.h
+        Dialogs.h
         GanttRenderer.cpp
         GanttRenderer.h
     )
