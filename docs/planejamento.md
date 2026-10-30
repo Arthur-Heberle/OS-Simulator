@@ -10,7 +10,7 @@ Cole no Claude Code, uma fase por vez:
 
 > *"Leia CLAUDE.md, docs/enunciado.md, docs/design.md e docs/testes.md. Execute a **Fase N** de docs/planejamento.md. Siga os critérios de aceitação, rode a verificação e me entregue o relatório."*
 
-**Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); integração na `main` por pull request com revisão cruzada; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
+**Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); cada um integra a própria branch na `main` (PR opcional, sem aprovação obrigatória) e avisa o outro para ler as mudanças; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
 
 ## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`)
 

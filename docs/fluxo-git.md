@@ -25,7 +25,7 @@ git fetch && git merge origin/main           # 4. traz a main para a SUA branch 
 cmake --build build && build\sim_tests.exe   # 5. compila sem warnings e testes verdes
 ```
 
-6. **Integrar:** abrir um Pull Request no GitHub (`fase-2-parser` → `main`); o colega lê e aprova (a nota é individual: os dois precisam entender tudo). Sem PR, o merge local também serve:
+6. **Integrar:** quem fez a branch revisa e integra **sozinho**, sem esperar aprovação do colega (a `main` não tem proteção de branch, então o autor pode fazer o merge do próprio PR). O PR é opcional e serve de registro: `gh pr create --base main --fill` e, depois de conferir o diff, `gh pr merge --merge --delete-branch`. Avise o colega no grupo quando integrar, para ele ler as mudanças depois (a nota é individual: os dois precisam entender tudo). Sem PR, o merge local também serve:
    ```
    git switch main && git pull
    git merge --no-ff fase-2-parser   # --no-ff deixa um commit de merge: a fase aparece inteira no histórico

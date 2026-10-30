@@ -29,7 +29,7 @@ C++17 · Qt 6 (Widgets + Svg) só na interface · CMake · Qt dinâmico + deploy
 - Perguntas em aberto (`enunciado.md` §5): use o **padrão** indicado, isole em um ponto único e comente `// PERGUNTA EM ABERTO Q-xx`. **Nunca invente respostas do professor.**
 - **Não instale ferramentas** nem altere o ambiente sem perguntar. Se Qt/CMake/compilador faltar, pare e pergunte.
 - Se uma decisão do `design.md` parecer errada ou conflitar com o enunciado, **pare e pergunte** em vez de mudar por conta própria.
-- **Git: seguir `docs/fluxo-git.md`.** Uma branch por fase (`fase-N-tema`), `fix/tema` para bug que já está na `main`; merge na `main` só com build sem warnings e `sim_tests` verde; conflitos resolvidos na branch da fase, nunca na `main`. Ninguém altera `Model.h` sem avisar a dupla. Commits pequenos, no imperativo, em português. Tag `entrega-A` marca o que vai ao Moodle.
+- **Git: seguir `docs/fluxo-git.md`.** Uma branch por fase (`fase-N-tema`), `fix/tema` para bug que já está na `main`; merge na `main` só com build sem warnings e `sim_tests` verde; conflitos resolvidos na branch da fase, nunca na `main`. Cada um integra a própria branch (PR opcional, sem aprovação obrigatória) e avisa o colega. Ninguém altera `Model.h` sem avisar a dupla. Commits pequenos, no imperativo, em português. Tag `entrega-A` marca o que vai ao Moodle.
 - Preferências pessoais de cada integrante para o Claude Code (ex.: modo de ensino passo a passo, assinatura de commits) ficam no `CLAUDE.local.md` de cada um (não versionado), não neste arquivo.
 - Caminho local do usuário tem espaços (Windows): se o build reclamar, sugerir clonar em caminho sem espaços.
 

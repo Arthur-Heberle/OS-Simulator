@@ -34,7 +34,7 @@ Princípios (valem para toda linha de código):
 | Testes | Executável `sim_tests` com macro `CHECK` própria (sem GoogleTest) | Evita dependência extra; cabe em 1 arquivo (`tests.cpp`) |
 | Empacotamento | **Qt dinâmico + deploy** (`qt_generate_deploy_app_script` + `cmake --install`, ou `windeployqt`) → pasta `dist/` com `.exe` + DLLs + plugins | **Confirmado pelo professor (Q9):** atende se não precisar instalar o Qt. Ver D26 |
 | Runtime do compilador | MinGW: `-static-libgcc -static-libstdc++` (e `libwinpthread` junto) | Evita depender de DLL do MinGW na máquina alvo |
-| Versionamento | Git; `main` sempre compila e passa em `sim_tests`; uma branch por fase (`fase-N-tema`) e `fix/tema`, ver `docs/fluxo-git.md`; tag `entrega-A` | Revisão cruzada; entrega reproduzível |
+| Versionamento | Git; `main` sempre compila e passa em `sim_tests`; uma branch por fase (`fase-N-tema`) e `fix/tema`, ver `docs/fluxo-git.md`; tag `entrega-A` | Cada um integra sem depender da aprovação do outro, mas lê o que o outro integrou; entrega reproduzível |
 | Formato de cada arquivo | UTF-8, **LF** (`.gitattributes`) | Repositório hoje tem CRLF misturado |
 
 Observação prática: o caminho local do usuário contém espaços (`...\UTFPR - Eng. Computacao\...`). Se o `moc`/Ninja/CMake reclamarem de caminho, **clonar em caminho sem espaços** (ex.: `C:\dev\OS-Simulator`).
