@@ -1,3 +1,19 @@
+// =============================================================================
+// Simulator.h — Motor da simulação (MECANISMO) e o histórico navegável.
+//
+// O quê: as regras de cada instante (ativar, concluir, perder prazo, escolher
+// quem executa, despachar, ligar/desligar CPUs) como funções livres sobre o
+// SystemSnapshot, e a classe Simulator, que só guarda o histórico de
+// snapshots e o cursor (passo a passo, retroceder/avançar, edição).
+//
+// Por quê: funções livres sem estado escondido deixam cada regra testável
+// isolada e o histórico determinístico (mesma entrada => mesmo resultado,
+// inclusive o sorteio, D14). O snapshot é copiado por valor a cada instante,
+// então retroceder é só mover o cursor (D16, D21).
+//
+// Requisitos: A1.1, A1.2, A1.4, A1.5, A3.3 (perda de prazo), A4.3, A4.4.
+// Decisões: D1, D3, D5, D6, D9, D10, D11, D14, D15, D16, D21, D28.
+// =============================================================================
 #pragma once
 #include <cstddef>
 #include <string>

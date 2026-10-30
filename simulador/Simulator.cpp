@@ -1,3 +1,7 @@
+// =============================================================================
+// Simulator.cpp — Implementação do motor (design.md §6) e da classe Simulator.
+// Ver o cabeçalho de Simulator.h.
+// =============================================================================
 #include "Simulator.h"
 #include <algorithm>
 
