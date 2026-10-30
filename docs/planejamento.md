@@ -12,12 +12,13 @@ Cole no Claude Code, uma fase por vez:
 
 **Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); cada um integra a própria branch na `main` (PR opcional, sem aprovação obrigatória) e avisa o outro para ler as mudanças; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
 
-## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`)
+## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 1)
 
 - **Fase 0:** concluída e integrada.
-- **Fase 1 (adiantada):** o conteúdo do `Model.h` (§5) já existe, mas ainda espalhado em `Task.h`, `CPU.h`, `SystemSnapshot.h` (e `Config`/`ParseResult` em `Parser.h`). Falta: fundir em `Model.h`, apagar `Task.cpp`, `Edit`/`EditKind`/`EditResult`, declarações restantes do `Simulator` (§9), `serializeSnapshot` e o fixture `demoHistoryG1`.
-- **Fase 2 (quase pronta):** `parseConfig` implementado conforme §8 (conferido à mão contra P1–P14 e robustez). Falta: `serializeConfig` (P14) e escrever P1–P14 em `tests.cpp`.
-- **Fase 3 (parcial):** registro, `tieHash`, RM/EDF com grupos de empate, `initState`, `makeNext`, `runOneTick` e `chooseTasks` prontos. Falta: `finishActivations`, `releaseActivations`, `checkDeadlines`, `dispatch` (regras nos comentários do `Simulator.cpp`) e todos os testes (G1–G4, FIFO, invariantes, fuzz).
+- **Fase 1: concluída na branch `fase-1-model`** (aguardando revisão do `Model.h` pela dupla e merge). `Model.h` reúne `Task`, `Job`, `CPU`, `Occurrence`, `SystemSnapshot`, `Config`, `ParseResult` (com `ok()`), `Edit`/`EditKind`/`EditResult`, `MAX_CPUS` e as ajudas `currentJob`, `isCandidate`, `naturalIdLess` (por blocos); `Task.h`, `CPU.h`, `SystemSnapshot.h` e `Task.cpp` saíram. Declarados sem definição: `parser::serializeConfig` (Fase 2) e `Simulator::reset/jumpTo/runToEnd/applyEdit` + `RunSummary`/`DEFAULT_MAX_TICKS` (Fase 4). Em `tests.cpp`: `serializeSnapshot`, `checkInvariants` (invariantes 1, 2, 3, 4, 5, 7, 8), `taskOn`/`countOcc`/`occTicks`. Fixture `demoHistoryG1()` (instantes 0–12, montado à mão) em `Simulator.cpp`, marcado TEMPORÁRIO (remover na Fase 7). `sim_tests`: 71 checks.
+- **Fase 2 (quase pronta):** `parseConfig` implementado conforme §8 (conferido à mão contra P1–P14 e robustez). Falta: definir `serializeConfig` (já declarada; P14) e escrever P1–P14 em `tests.cpp`.
+- **Fase 3 (parcial):** registro, `tieHash`, RM/EDF com grupos de empate, `initState`, `makeNext`, `runOneTick` e `chooseTasks` prontos. Falta: `finishActivations`, `releaseActivations`, `checkDeadlines`, `dispatch` (regras nos comentários do `Simulator.cpp`) e todos os testes (G1–G4, FIFO, fuzz). O verificador de invariantes e os helpers de consulta já existem (Fase 1); o G1 do motor pode ser conferido com o mesmo roteiro do teste do `demoHistoryG1`.
+- **Fase 4:** a API já está declarada em `Simulator.h` (Fase 1); falta definir e testar.
 
 ## 1. Calendário (hoje = 23/10/2026; defesa do A = 09/11/2026)
 
@@ -95,8 +96,8 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 5. **Revisão cruzada obrigatória** do `SystemSnapshot` e do `Occurrence` pelos dois integrantes (é o que o Gantt lê).
 
 **Critérios de aceitação**
-- [ ] Tudo compila contra os mesmos headers; sem ponteiros entre structs; `SystemSnapshot` copiável por valor.
-- [ ] Cada campo tem comentário (o quê/por quê) e cita o requisito/decisão.
+- [x] Tudo compila contra os mesmos headers; sem ponteiros entre structs; `SystemSnapshot` copiável por valor.
+- [x] Cada campo tem comentário (o quê/por quê) e cita o requisito/decisão.
 - [ ] Os dois aprovaram o `Model.h` (registrar no relatório). Após isso, mudanças só com aviso.
 
 **Commit:** `Model.h: unifica Task/CPU/SystemSnapshot e define contratos`.

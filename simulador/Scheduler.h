@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include "SystemSnapshot.h"
+#include "Model.h"
 
 // Task indexes (positions in SystemSnapshot::tasks) grouped by priority,
 // from the highest-priority group to the lowest.
