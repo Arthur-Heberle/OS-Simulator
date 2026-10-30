@@ -256,8 +256,8 @@ bool isTooDark(const std::string& color) {
 }
 
 // Cor quase branca (os três canais acima de 0xE0): sobre o fundo branco do
-// Gantt, uma barra assim pareceria "pronta" (ausência de cor, A2.1). Usada só
-// para não ESCOLHER essas cores na paleta automática (design.md §8).
+// Gantt, uma barra assim pareceria "pronta" (ausência de cor, A2.1). A paleta
+// automática nunca a escolhe e, se vier do arquivo, é trocada com aviso (D17).
 bool isTooLight(const std::string& color) {
     unsigned value = static_cast<unsigned>(std::stoul(color, nullptr, 16));
     unsigned r = (value >> 16) & 0xFF, g = (value >> 8) & 0xFF, b = value & 0xFF;
@@ -442,6 +442,10 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
     } else if (isTooDark(color)) {
         std::string newColor = nextFreeColor(usedColors, colorCursor);
         addMessage(result, MsgCode::DarkColor, {line, color, task.id, newColor});
+        color = newColor;
+    } else if (isTooLight(color)) {
+        std::string newColor = nextFreeColor(usedColors, colorCursor);
+        addMessage(result, MsgCode::LightColor, {line, color, task.id, newColor});
         color = newColor;
     }
 

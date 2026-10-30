@@ -630,6 +630,13 @@ static void testParserColors() {
     CHECK(std::adjacent_find(colors.begin(), colors.end()) == colors.end());  // todas diferentes
     CHECK(r.config.tasks[3].color != "000000");
 
+    // Quase branca vinda do arquivo: aviso e outra cor (pareceria "pronta", A2.1).
+    const ParseResult white = parse("RM;2;1\n1;FFFFFF;0;1;4;4\n2;f0f0f0;0;1;4;4\n");
+    CHECK(white.ok());
+    CHECK(hasMessage(white.warnings, {"Linha 2", "FFFFFF", "clara demais"}));
+    CHECK(hasMessage(white.warnings, {"Linha 3", "F0F0F0", "clara demais"}));
+    CHECK(white.config.tasks[0].color != "FFFFFF");
+
     // A paleta automática nunca escolhe preto nem branco, mesmo com muitas tarefas.
     std::string many = "RM;2;1\n";
     for (int i = 0; i < 300; ++i) many += "T" + std::to_string(i) + ";;0;1;5\n";
