@@ -77,19 +77,17 @@ endfunction()
 # Biblioteca estática: os testes e a interface usam exatamente o mesmo código.
 # Regra: NENHUM arquivo daqui inclui Qt (design.md §1, princípio 1).
 # A lista é explícita (sem file(GLOB)) para que adicionar/remover arquivo seja
-# uma decisão visível; a Fase 1 troca Task/CPU/SystemSnapshot por Model.h.
+# uma decisão visível. Model.h é o contrato de dados (design.md §5).
 # -----------------------------------------------------------------------------
 add_library(simcore STATIC
     Parser.cpp
     Scheduler.cpp
     Simulator.cpp
     # Cabeçalhos listados só para aparecerem nas IDEs.
-    CPU.h
+    Model.h
     Parser.h
     Scheduler.h
     Simulator.h
-    SystemSnapshot.h
-    Task.h
 )
 # Includes planos ("Task.h"): a própria pasta é o diretório de include (D23).
 target_include_directories(simcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

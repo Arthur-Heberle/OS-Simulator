@@ -23,12 +23,10 @@
 #include <iostream>
 #include <vector>
 
-#include "CPU.h"
+#include "Model.h"
 #include "Parser.h"
 #include "Scheduler.h"
 #include "Simulator.h"
-#include "SystemSnapshot.h"
-#include "Task.h"
 
 // -----------------------------------------------------------------------------
 // Harness mínimo (docs/testes.md §1).

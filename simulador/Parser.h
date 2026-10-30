@@ -6,7 +6,7 @@
 #include <string_view>
 #include <vector>
 
-#include "Task.h"
+#include "Model.h"
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -16,7 +16,6 @@
 // schedulerNames, Scheduler.h): incluir um algoritmo não exige mexer no parser [A4.2].
 
 // Constants to the system config
-inline constexpr int MAX_CPUS = 64;                  // D12 (justificativa no design.md)
 inline constexpr int MAX_QUANTUM = 1000000;
 inline constexpr Tick MAX_FIELD_VALUE = 1000000000;  // 10^9: limite dos números da tarefa (design.md §8)
 
@@ -107,20 +106,7 @@ inline const std::map<MsgCode, MessageInfo> MESSAGES = {
 // Result of the parser
 // ---------------------------------------------------------------------------
 
-// System configuration. The initial values are the defaults [A3.2].
-struct Config {
-    std::string algorithm = "RM";
-    int quantum = 2;
-    int cpuCount = 1;
-    uint64_t seed = 1;        // semente do sorteio (D14); alterável na interface
-    std::vector<Task> tasks;  // file fields filled in; runtime fields keep their defaults
-};
-
-struct ParseResult {
-    Config config;
-    std::vector<std::string> errors;    // if not empty, the simulation must not run
-    std::vector<std::string> warnings;  // shown to the user, but the simulation can run
-};
+// Config e ParseResult moram em Model.h (contrato de dados, design.md §5).
 
 // ---------------------------------------------------------------------------
 // Public function
