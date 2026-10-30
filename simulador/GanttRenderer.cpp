@@ -58,6 +58,7 @@ QFont chartFont() {
     font.setPixelSize(12);
     return font;
 }
+// Fonte pequena (10 px) dos rótulos secundários, como os números dos eixos.
 QFont smallFont() {
     QFont font;
     font.setPixelSize(10);
@@ -67,6 +68,8 @@ QFont smallFont() {
 // Estado de uma célula (tarefa x instante) para o desenho (D2 + figuras do livro).
 enum class Cell { None, Ready, Running, Suspended };
 
+// Converte o estado da tarefa na célula desenhada no instante: executando (cor),
+// pronta (contorno), suspensa (preto pontilhado) ou nada [A2.1].
 Cell cellOf(const Task& task) {
     switch (task.state) {
         case TaskState::Ready:     return Cell::Ready;
@@ -89,6 +92,7 @@ QColor textColorOn(const QColor& background) {
     return luminance < 140 ? Qt::white : Qt::black;
 }
 
+// std::string (UTF-8) -> QString.
 QString qs(const std::string& text) { return QString::fromStdString(text); }
 
 // Seta de 'from' até 'to' com ponta cheia.
@@ -257,6 +261,7 @@ void drawBar(QPainter& p, const QRectF& r, Cell cell, const QColor& color, const
 
 // Faixa vertical da linha 'row' e retângulo da barra dentro dela.
 double rowTop(double panelTop, int row, int rowHeight) { return panelTop + row * rowHeight; }
+// Retângulo da barra: deixa 22% de folga em cima e embaixo da linha para os ícones.
 QRectF barRect(double x0, double x1, double top, int rowHeight) {
     return QRectF(x0, top + rowHeight * 0.22, x1 - x0, rowHeight * 0.56);
 }
@@ -285,6 +290,8 @@ struct LegendItem {
     OccurrenceType type;
     QString text;
 };
+// Itens da legenda [RG3]: os estados das células e um ícone por tipo de ocorrência.
+// É montada uma só vez (static) e reaproveitada pela tela e pelas imagens.
 const std::vector<LegendItem>& legendItems() {
     static const std::vector<LegendItem> items = {
         {0, OccurrenceType::Dispatch, QStringLiteral("Executando (cor da tarefa; CPUk = processador)")},
@@ -345,11 +352,13 @@ Tick GanttLayout::tickAt(double x) const {
     return from + static_cast<Tick>(std::floor((x - left) / tickWidth));
 }
 
+// Linha de tarefa sob a coordenada y (usada pelo tooltip); -1 se y está fora do painel.
 int GanttLayout::taskRowAt(double y) const {
     if (y < tasksTop || y >= tasksTop + static_cast<double>(taskRows.size()) * rowHeight) return -1;
     return static_cast<int>((y - tasksTop) / rowHeight);
 }
 
+// Linha de CPU sob a coordenada y (usada pelo tooltip); -1 se y está fora do painel.
 int GanttLayout::cpuRowAt(double y) const {
     if (cpuCount == 0 || y < cpuTop || y >= cpuTop + static_cast<double>(cpuCount) * rowHeight) return -1;
     return static_cast<int>((y - cpuTop) / rowHeight);
@@ -429,6 +438,8 @@ double GanttRenderer::legendHeight(double width) {
     return boxes.empty() ? 0 : boxes.back().bottom();
 }
 
+// Desenha a legenda dentro de 'area' (itens de legendItems). A tela e as imagens
+// usam esta mesma função, então a legenda é igual nos dois lugares [RG3, A2.4].
 void GanttRenderer::paintLegend(QPainter& p, const QRectF& area) {
     p.save();
     p.setRenderHint(QPainter::Antialiasing, true);
@@ -897,6 +908,8 @@ protected:
 };
 }  // namespace
 
+// Monta o widget: área de rolagem com o desenho (canvas_) e a legenda fixa embaixo,
+// fora da rolagem, para ela não sumir quando o usuário rola o gráfico.
 GanttWidget::GanttWidget(QWidget* parent) : QWidget(parent) {
     options_.showLegend = false;  // a legenda fica fixa, fora da rolagem
     canvas_ = new GanttCanvas(this);
@@ -920,19 +933,23 @@ void GanttWidget::setHistory(const std::vector<SystemSnapshot>* history, std::si
     updateCanvas(true);
 }
 
+// Define o título do desenho (nome da configuração) e redesenha.
 void GanttWidget::setTitle(const QString& title) {
     options_.title = title;
     updateCanvas(false);
 }
 
+// Zoom: largura de 1 tick entre 4 e 64 px; redesenha e mantém o instante atual visível.
 void GanttWidget::setTickWidth(int pixels) {
     options_.tickWidth = std::max(4, std::min(64, pixels));
     updateCanvas(true);
 }
 
+// Passo do zoom: 2 px abaixo de 16 px por tick e 8 px acima, para a mudança parecer uniforme.
 void GanttWidget::zoomIn() { setTickWidth(options_.tickWidth < 16 ? options_.tickWidth + 2 : options_.tickWidth + 8); }
 void GanttWidget::zoomOut() { setTickWidth(options_.tickWidth <= 16 ? options_.tickWidth - 2 : options_.tickWidth - 8); }
 
+// Ajusta o tamanho do desenho ao histórico e, se pedido, rola até o instante atual.
 void GanttWidget::updateCanvas(bool scrollToCurrent) {
     if (history_ == nullptr || history_->empty() || upto_ == 0) {
         canvas_->resize(400, 100);

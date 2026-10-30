@@ -77,6 +77,7 @@ static const char* stateName(TaskState state) {
     return "?";
 }
 
+// Nome de cada tipo de ocorrência, para as mensagens de teste e o printGrid.
 static const char* occurrenceName(OccurrenceType type) {
     switch (type) {
         case OccurrenceType::Arrival:      return "Arrival";

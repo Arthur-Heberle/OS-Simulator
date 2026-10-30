@@ -40,6 +40,7 @@
 
 namespace {
 
+// std::string (UTF-8) -> QString.
 QString qs(const std::string& text) { return QString::fromStdString(text); }
 
 // Estado da tarefa em português (tabela, detalhe).
@@ -77,6 +78,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     resize(1400, 860);
 }
 
+// Cria os widgets da janela (ações, barra, Gantt, docks, tabela, registro) e liga os
+// sinais. Aqui não há regra da simulação: tudo vem do Simulator.
 void MainWindow::buildUi() {
     setWindowTitle(QStringLiteral("Simulador de SO multitarefa — RM / EDF"));
 
@@ -292,6 +295,8 @@ bool MainWindow::openConfigFile(const QString& path) {
     return true;
 }
 
+// Arquivo > Salvar configuração: grava a configuração ATUAL (com as edições feitas)
+// no formato do enunciado, para poder reabri-la depois [A3.3].
 void MainWindow::saveConfigDialog() {
     if (!loaded_) return;
     // A configuração ATUAL (com as edições) no formato do arquivo (A3.3).
@@ -334,12 +339,15 @@ void MainWindow::stepForward() {
     checkEnd();
 }
 
+// Retrocede 1 instante: só move o cursor do histórico e o relógio acompanha [A1.5.2].
 void MainWindow::stepBack() {
     if (!loaded_ || !sim_.stepBack()) return;
     log(QStringLiteral("Voltou para o instante %1.").arg(sim_.current().tick));
     refreshAll();
 }
 
+// Execução completa [A1.5.3]: calcula até o fim (ou até um limite, com a mensagem do
+// motivo) e mostra o resultado.
 void MainWindow::runToEnd() {
     if (!loaded_) return;
     stopPlay();
@@ -354,6 +362,8 @@ void MainWindow::runToEnd() {
     checkEnd();
 }
 
+// Vai para o instante pedido (para trás ou para frente). Se a simulação termina antes,
+// fica no último instante e explica o motivo [A1.5.2, A5].
 void MainWindow::jumpToTick(Tick tick) {
     if (!loaded_) return;
     stopPlay();
@@ -370,6 +380,7 @@ void MainWindow::jumpToTick(Tick tick) {
     checkEnd();
 }
 
+// Volta ao instante 0 (as edições feitas no instante 0 continuam valendo).
 void MainWindow::resetSimulation() {
     if (!loaded_) return;
     stopPlay();
@@ -378,6 +389,8 @@ void MainWindow::resetSimulation() {
     refreshAll();
 }
 
+// Play/Pausa: um QTimer avança um passo a cada "velocidade" ms. O tempo simulado não
+// depende do tempo real [A1.1]; o timer só controla o ritmo da animação.
 void MainWindow::togglePlay() {
     if (timer_->isActive()) {
         stopPlay();
@@ -390,12 +403,14 @@ void MainWindow::togglePlay() {
     refreshActions();
 }
 
+// Para o play (se estiver rodando) e volta o texto do botão para "Play".
 void MainWindow::stopPlay() {
     if (timer_ != nullptr && timer_->isActive()) timer_->stop();
     if (playAct_ != nullptr) playAct_->setText(QStringLiteral("Play"));
     refreshActions();
 }
 
+// Alterna entre passo a passo e completo [A1.5]; ao escolher completo, executa até o fim.
 void MainWindow::setCompleteMode(bool complete) {
     completeMode_ = complete;
     // Sincroniza a combo sem disparar o sinal de novo (senão runToEnd rodaria duas vezes).
@@ -437,6 +452,8 @@ bool MainWindow::applyEdits(const std::vector<Edit>& edits, const QString& what)
     return true;
 }
 
+// Botões da tarefa selecionada (Suspender, Retomar, Ativar agora, Forçar término,
+// Remover): monta a edição e a aplica por applyEdits, que mostra a recusa se houver [A3.4].
 void MainWindow::taskAction(EditKind kind) {
     const int index = selectedTask();
     if (index < 0) return;
@@ -456,6 +473,8 @@ void MainWindow::taskAction(EditKind kind) {
     applyEdits({edit}, what);
 }
 
+// Tela 3: edita os parâmetros da tarefa selecionada. Tarefa ignorada no Projeto A não
+// pode ser editada (explica o motivo ao usuário).
 void MainWindow::editTaskDialog() {
     const int index = selectedTask();
     if (index < 0 || !loaded_) return;
@@ -474,6 +493,7 @@ void MainWindow::editTaskDialog() {
     }
 }
 
+// Tela 4: cria uma tarefa nova no instante atual.
 void MainWindow::newTaskDialog() {
     if (!loaded_) return;
     stopPlay();
@@ -484,6 +504,8 @@ void MainWindow::newTaskDialog() {
     }
 }
 
+// Tela 5: configurações do sistema (algoritmo, quantum, CPUs, semente) e da janela
+// (zoom e pasta das imagens).
 void MainWindow::systemDialog() {
     if (!loaded_) return;
     stopPlay();
@@ -512,6 +534,8 @@ QString MainWindow::exportFolder() const {
     return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
 }
 
+// Arquivo > Exportar imagens: o usuário escolhe a pasta e o Gantt da simulação inteira
+// é gravado em PNG e SVG [A2.4].
 void MainWindow::exportDialog() {
     if (!loaded_) return;
     stopPlay();
@@ -533,6 +557,8 @@ void MainWindow::exportDialog() {
     showMessage(false, QStringLiteral("Imagens exportadas"), files.join(QStringLiteral("\n")));
 }
 
+// Ao chegar ao fim da simulação: exporta PNG + SVG (uma vez por linha do tempo, para
+// não repetir a cada clique) e mostra a Tela 6 [A2.4].
 void MainWindow::checkEnd() {
     if (!loaded_ || !sim_.isFinished() || sim_.cursor() + 1 != sim_.history().size()) return;
     if (exportedTimeline_ == timeline_) return;  // esta linha do tempo já foi exportada
@@ -599,6 +625,8 @@ void MainWindow::refreshAll() {
     refreshActions();
 }
 
+// [E1.6] Painel "Estado do sistema" do instante atual: relógio, CPUs (inclusive os
+// períodos em que ficaram desligadas, A1.2), filas e utilização [A1.5.1].
 void MainWindow::refreshState() {
     if (!loaded_) {
         state_->setHtml(QStringLiteral("<p>Abra um arquivo de configuração (<b>Arquivo &gt; Abrir configuração</b>).</p>"));
@@ -686,6 +714,8 @@ void MainWindow::refreshState() {
     state_->setHtml(html);
 }
 
+// [E1.7] Tabela de TCBs: uma linha por tarefa com todas as informações dela [A1.3],
+// em ordem natural de ID.
 void MainWindow::refreshTable() {
     const int keep = selectedTask();
     // [TELA 1 / E1.7] Uma linha por TCB (A1.3), todas as colunas. origem: SystemSnapshot::tasks de history[cursor].
@@ -735,6 +765,7 @@ void MainWindow::refreshTable() {
     table_->blockSignals(false);
 }
 
+// [E1.8] Detalhe da tarefa selecionada: estado, ocorrência atual e avisos.
 void MainWindow::refreshDetail() {
     const int index = selectedTask();
     if (!loaded_ || index < 0) {
@@ -758,6 +789,8 @@ void MainWindow::refreshDetail() {
     detail_->setText(html);
 }
 
+// Habilita só os botões e ações que fazem sentido agora [A5]: sem arquivo carregado,
+// no fim da simulação, sem tarefa selecionada, etc.
 void MainWindow::refreshActions() {
     const bool playing = timer_ != nullptr && timer_->isActive();
     const bool atEnd = loaded_ && sim_.cursor() + 1 == sim_.history().size();
@@ -798,6 +831,7 @@ int MainWindow::selectedTask() const {
     return row >= 0 && row < static_cast<int>(tableTasks_.size()) ? tableTasks_[row] : -1;
 }
 
+// Escreve no registro o que aconteceu no instante (as ocorrências, sem os despachos) [A2.2].
 void MainWindow::logInstant(const SystemSnapshot& s) {
     // [TELA 1 / E1.10] origem: SystemSnapshot::occurrences do instante (A2.2: o que aconteceu em x = tick).
     QStringList parts;
@@ -812,10 +846,12 @@ void MainWindow::logInstant(const SystemSnapshot& s) {
     log(QStringLiteral("t=%1  %2").arg(s.tick).arg(parts.isEmpty() ? QStringLiteral("sem eventos") : parts.join(QStringLiteral(" · "))));
 }
 
+// Acrescenta uma linha ao registro (dock de baixo).
 void MainWindow::log(const QString& line) {
     if (log_) log_->appendPlainText(line);
 }
 
+// Mostra um erro ou informação, com o motivo, sem bloquear a janela [A5].
 void MainWindow::showMessage(bool isError, const QString& title, const QString& text) {
     // Não bloqueia: a janela continua respondendo (A5).
     auto* box = new QMessageBox(isError ? QMessageBox::Warning : QMessageBox::Information, title, text, QMessageBox::Ok, this);
@@ -823,6 +859,7 @@ void MainWindow::showMessage(bool isError, const QString& title, const QString& 
     box->open();
 }
 
+// Ao fechar a janela, para o play: o timer não pode disparar com a janela destruída.
 void MainWindow::closeEvent(QCloseEvent* event) {
     stopPlay();  // fechar durante o play não deixa o timer disparando
     event->accept();

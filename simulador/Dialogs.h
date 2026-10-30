@@ -75,6 +75,7 @@ inline QWidget* colorField(QLineEdit* edit) {
     return row;
 }
 
+// std::string (UTF-8) -> QString.
 inline QString qs(const std::string& text) { return QString::fromStdString(text); }
 
 // -----------------------------------------------------------------------------
