@@ -523,3 +523,26 @@ ParseResult parser::parseConfig(const std::string& text) {
         return result;
     }
 }
+
+std::string parser::serializeConfig(const Config& config) {
+    // Mesmo formato que parseConfig lê [A3.3], uma linha por tarefa, sem ';'
+    // final. Números com std::to_string (não dependem de locale). Ida e volta
+    // (teste P14): parseConfig(serializeConfig(c)) devolve os mesmos campos de c,
+    // porque os padrões já aplicados (prazo = período, cor automática) são
+    // escritos por extenso.
+    // A semente do sorteio (Config::seed) NÃO é escrita: o formato do enunciado
+    // não tem esse campo, e um 4º campo na linha do sistema faria o arquivo
+    // fugir do formato. Ao recarregar, ela volta ao padrão.
+    std::string out = config.algorithm + ";" + std::to_string(config.quantum) + ";" +
+                      std::to_string(config.cpuCount) + "\n";
+    for (const Task& t : config.tasks) {
+        out += t.id + ";" + t.color + ";" + std::to_string(t.arrival) + ";" +
+               std::to_string(t.duration) + ";" + std::to_string(t.period) + ";" +
+               std::to_string(t.deadline);
+        if (!t.rawEvents.empty()) {
+            out += ";" + t.rawEvents;  // lista_eventos crua, com os ';' internos (D30)
+        }
+        out += "\n";
+    }
+    return out;
+}

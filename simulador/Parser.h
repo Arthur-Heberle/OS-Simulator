@@ -152,6 +152,6 @@ namespace parser {
     // Gera o texto de um arquivo de configuração a partir de uma Config
     // (ida e volta: parseConfig(serializeConfig(c)) reproduz c; teste P14).
     // Usado por "Salvar configuração" na interface, depois de edições (A3.1).
-    // DECLARADA NA FASE 1, DEFINIDA NA FASE 2 (design.md §8).
+    // A semente do sorteio não faz parte do formato e não é escrita.
     std::string serializeConfig(const Config& config);
 }
