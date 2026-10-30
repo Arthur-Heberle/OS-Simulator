@@ -27,7 +27,11 @@
 // que deixa cada regra testável isolada e o histórico determinístico.
 // ---------------------------------------------------------------------------
 
-// Instante 0 já processado (ativações do instante 0 + primeiro escalonamento).
+// Estado inicial ANTES de processar o instante 0: tarefas do arquivo com
+// nextRelease = ingresso, CPUs criadas. É a base para editar o instante 0.
+SystemSnapshot baseState(const Config& config);
+
+// Instante 0 já processado: baseState + beginInstant + scheduleAndDispatch.
 SystemSnapshot initState(const Config& config);
 
 // Instante seguinte: consome o tick [t, t+1) e processa o instante t+1 (D3).
@@ -35,6 +39,11 @@ SystemSnapshot makeNext(const SystemSnapshot& prev);
 
 // Fim da simulação: toda tarefa simulada (não ignorada) está Terminated (D6).
 bool finished(const SystemSnapshot& s);
+
+// As duas metades de um instante (design.md §6). A edição manual é aplicada
+// entre elas (D28).
+void beginInstant       (SystemSnapshot& s);  // conclusões -> ativações -> perdas de prazo
+void scheduleAndDispatch(SystemSnapshot& s);  // escalonador -> chooseTasks -> dispatch
 
 // Etapas, na ordem em que makeNext as chama (ordem fixa: design.md §6, Q-A10).
 void runOneTick        (SystemSnapshot& s);  // 1. executa [t, t+1) com as CPUs decididas em t

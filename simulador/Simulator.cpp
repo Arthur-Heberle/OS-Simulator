@@ -14,13 +14,18 @@
 // history[k+1] sem que a informação de quem executou em [k, k+1) se perca.
 // ---------------------------------------------------------------------------
 
-// Processa um instante já com o relógio no valor certo: conclusões ->
-// ativações -> perdas de prazo -> escalonamento -> despacho (design.md §6).
-static void processInstant(SystemSnapshot& s) {
+// Um instante é processado em duas metades (design.md §6). A edição manual
+// entra ENTRE elas (D28): o escalonador já enxerga o estado editado.
+
+// 1ª metade: conclusões -> ativações -> perdas de prazo.
+void beginInstant(SystemSnapshot& s) {
     finishActivations(s);
     releaseActivations(s);
     checkDeadlines(s);
+}
 
+// 2ª metade: escalonamento -> despacho (e fila de prontos).
+void scheduleAndDispatch(SystemSnapshot& s) {
     // Política: o algoritmo vem do snapshot (pode mudar durante a simulação, A3.1).
     SchedulerFn scheduler = findScheduler(s.algorithm);
     PriorityGroups groups = scheduler ? scheduler(s) : PriorityGroups{};
@@ -31,7 +36,7 @@ static void processInstant(SystemSnapshot& s) {
     dispatch(s, chosen, drawn);
 }
 
-SystemSnapshot initState(const Config& config) {
+SystemSnapshot baseState(const Config& config) {
     SystemSnapshot s;
     s.tick = 0;
     s.algorithm = config.algorithm;
@@ -45,7 +50,13 @@ SystemSnapshot initState(const Config& config) {
     for (int i = 0; i < config.cpuCount; i++) {
         s.cpus[i].id = i;
     }
-    processInstant(s);
+    return s;
+}
+
+SystemSnapshot initState(const Config& config) {
+    SystemSnapshot s = baseState(config);
+    beginInstant(s);
+    scheduleAndDispatch(s);
     return s;
 }
 
@@ -55,7 +66,8 @@ SystemSnapshot makeNext(const SystemSnapshot& prev) {
 
     runOneTick(next);                  // consome [prev.tick, prev.tick + 1)
     next.tick = prev.tick + 1;
-    processInstant(next);
+    beginInstant(next);
+    scheduleAndDispatch(next);
     return next;
 }
 
@@ -162,7 +174,10 @@ void checkDeadlines(SystemSnapshot& s) {
     for (int i = 0; i < static_cast<int>(s.tasks.size()); ++i) {
         Task& t = s.tasks[i];
         for (Job& job : t.jobs) {
-            if (job.absDeadline == s.tick && job.remaining > 0 && !job.missed) {
+            // '<=' e não '==': numa execução normal dá no mesmo (o prazo é visto
+            // no instante exato), mas uma edição (SetDeadline) pode trazer o prazo
+            // para antes do instante atual, e a perda tem de ser registrada mesmo assim.
+            if (job.absDeadline <= s.tick && job.remaining > 0 && !job.missed) {
                 job.missed = true;
                 t.deadlineMisses++;
                 addOccurrence(s, OccurrenceType::DeadlineMiss, i, t.cpu);
