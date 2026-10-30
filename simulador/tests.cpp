@@ -7,7 +7,8 @@
 //     de invariantes de histórico, helpers de consulta), naturalIdLess e o
 //     histórico de demonstração de G1 (demoHistoryG1).
 //   - Fase 2: parser P1–P14 e robustez (docs/testes.md §3).
-//   - Fase 3: motor (G1–G4, FIFO, invariantes 1–9, fuzz). 'sim_tests --grid'
+//   - Fase 3: motor (G1–G4, FIFO, invariantes 1–9, fuzz). 'sim_tests --rapido' roda o fuzz
+//     com 500 sistemas (dia a dia); 'sim_tests --grid'
 //     imprime as grades de G1, G2 e G3.
 //   - Fase 4: G5, G6 e invariante 10.
 //
@@ -1066,6 +1067,11 @@ int main(int argc, char* argv[]) {
         printGrid(runConfig(G3_TEXT), 9);
         return 0;
     }
+    // 'sim_tests --rapido': tudo igual, mas o fuzz roda 500 sistemas em vez de
+    // 10 000 (segundos em vez de ~20 s), para o dia a dia. Antes de integrar
+    // na main, rodar o completo (sem argumentos).
+    const bool quick = argc > 1 && std::string(argv[1]) == "--rapido";
+
     testBuildSmoke();
     testSerializeSnapshot();
     testModelDefaults();
@@ -1084,7 +1090,7 @@ int main(int argc, char* argv[]) {
     testGoldenG3();
     testGoldenG4();
     testFifoExtensibility();
-    testFuzz(10000);
+    testFuzz(quick ? 500 : 10000);
 
     std::cout << g_checks << " checks, " << g_fails << " falhas\n";
     return g_fails == 0 ? 0 : 1;

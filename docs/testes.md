@@ -16,7 +16,7 @@
 - `tests.cpp` também contém `printGrid(const std::vector<SystemSnapshot>&, int maxTicks)`: imprime uma linha por tick (`tick | CPU1 CPU2 ...` com o ID da tarefa ou `-`) e a lista de ocorrências do instante. Use-a para depurar e para a Fase 3 (sem GUI).
 - `runConfig(text)`: faz `parseConfig` → `Simulator::load` → `runToEnd` e devolve o histórico. As configs de teste são **strings embutidas** no arquivo (não criar arquivos extras: orçamento de 18).
 - Helpers: `taskOn(history, tick, cpu)` (ID ou "-"), `countOcc(history, type, taskId)`, `occAt(history, tick, type)`.
-- Rodar: `cmake --build build --target sim_tests && ./build/sim_tests` (a cada commit). Saída final: `N checks, M falhas`. `sim_tests --grid` imprime as grades de G1, G2 (RM e EDF) e G3. O fuzz de 10 000 sistemas leva ~20 s no build Release.
+- Rodar: `cmake --build build --target sim_tests && ./build/sim_tests` (a cada commit). Saída final: `N checks, M falhas`. `sim_tests --grid` imprime as grades de G1, G2 (RM e EDF) e G3. O fuzz de 10 000 sistemas leva ~20 s no build Release; `sim_tests --rapido` roda só 500 (dia a dia). Antes de integrar na `main`, rodar o completo.
 
 ---
 
