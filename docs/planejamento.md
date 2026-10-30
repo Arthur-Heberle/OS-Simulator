@@ -113,7 +113,7 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 **Critérios de aceitação**
 - [ ] P1–P14 e casos de robustez verdes; nenhuma exceção escapa; 100 000 tarefas em tempo razoável.
 - [ ] Mensagens de erro legíveis (mostrar 5 exemplos no relatório).
-- [ ] `periodo ≤ 0` e IDs de servidor não derrubam o carregamento (viram avisos).
+- [ ] `periodo = 0` não derruba o carregamento (aviso, tarefa ignorada); `periodo < 0` é erro com linha/campo/valor (Q10); IDs `BSxx…` com período > 0 carregam como periódicas comuns (Q12).
 
 **Commit:** `Parser: leitura tolerante, erros por linha/campo e serializador`.
 

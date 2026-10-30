@@ -103,9 +103,9 @@ Cada caso passa a **string** a `parseConfig` e verifica `errors`/`warnings`/camp
 | P8 | Algoritmo `XYZ` | Erro com a linha e a lista de algoritmos disponíveis |
 | P9 | `qtde_cpus` = `0`, `65` (`MAX_CPUS+1`), `abc`, `1.5` | Erro em cada caso; `1` e `64` válidos |
 | P10 | ID duplicado (inclusive `a1` × `A1`) | Erro citando as duas linhas |
-| P11 | Cor `GG0000`, `FFF`, `1234567` | Erro "esperado RRGGBB"; `#FF0000` tolerado; cor vazia ⇒ paleta automática (sem erro) |
-| P12 | Número inválido em cada campo (`ingresso=-1`, `duracao=0`, `periodo=x`, `prazo=-2`, `duracao=1.5`) | Erro apontando **linha, campo e valor** |
-| P13 | `periodo=0` (aperiódica), `periodo=-5` (esporádica), ID `BS01` com período > 0, + 1 tarefa periódica válida | `ok()`; 3 tarefas `ignored` com `ignoredReason`; **avisos** claros (D7); a válida carrega |
+| P11 | Cor `GG0000`, `FFF`, `1234567`; cor repetida; cor `000000` | Erro "esperado RRGGBB" nos três primeiros; `#FF0000` tolerado; cor vazia ⇒ paleta automática (sem erro); repetida ou preta ⇒ **aviso** e a tarefa recebe outra cor livre (D17) |
+| P12 | Número inválido em cada campo (`ingresso=-1`, `duracao=0`, `periodo=x`, `periodo=-5`, `prazo=-2`, `duracao=1.5`) | Erro apontando **linha, campo e valor**; `periodo=-5` é erro no A (Q10) |
+| P13 | `periodo=0` (aperiódica), ID `BS01` com período > 0, + 1 tarefa periódica válida | `ok()`; a aperiódica fica `ignored` com `ignoredReason` e **aviso** claro (D7); `BS01` carrega como **periódica comum**, sem aviso (Q12); a válida carrega |
 | P14 | Ida e volta: `parseConfig` → `serializeConfig` → `parseConfig` | Configs iguais; `lista_eventos` com `;` internos preservada; prazo vazio ⇒ preenchido com o período |
 
 Casos extras de robustez: arquivo vazio; só espaços; 100 000 tarefas (tempo razoável); linha de 1 MB; bytes binários; nenhuma tarefa simulável (todas ignoradas) ⇒ erro claro.

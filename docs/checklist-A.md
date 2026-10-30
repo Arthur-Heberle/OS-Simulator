@@ -148,7 +148,7 @@
 - [ ] `duracao` é o tempo de execução da tarefa.
 - [ ] `periodo > 0`: tarefa periódica, ativada a cada `n` ticks.
 - [ ] `periodo = 0`: tarefa aperiódica.
-- [ ] `periodo < 0`: o texto do A diz "erro", o do B diz "esporádica". **Aberta Q-A2.** Padrão: carregar com **aviso**, marcar como esporádica e **ignorar** (D7); nunca falha fatal (A3.3.7).
+- [ ] `periodo < 0` é **erro do arquivo** no A, mostrado com linha, campo e valor. **Respondido (Q10)**; no B passa a indicar esporádica (B1.3).
 - [ ] `prazo` (deadline) conta a partir da ativação.
 - [ ] Prazo ultrapassado é um erro e aparece no Gantt.
 - [ ] A tarefa que perdeu o prazo continua executando até o tempo executado ser ≥ à duração.
@@ -223,7 +223,9 @@
 
 - [x] Uma pasta portátil com `.exe` + DLLs atende o RG5? **RESPONDIDO (Q9):** atende desde que não seja preciso instalar o Qt antes (D26).
 - [x] Qual o papel do `quantum` no RM e no EDF? **RESPONDIDO (Q4):** tem que ser lido do arquivo; usar ou não é específico de cada escalonador (RM/EDF ignoram).
-- [ ] No desempate (A4.3), o "prazo" é o relativo ou o absoluto? *(aberta Q-A3; padrão: absoluto, D14)*
+- [x] No desempate (A4.3), o "prazo" é o relativo ou o absoluto? **RESPONDIDO (Q11):** prazo absoluto da ocorrência atual (D14).
+- [x] IDs `BSxx/PSxx/DSxx/SSxx` no A? **RESPONDIDO (Q12):** com período > 0 são periódicas comuns; não estarão nos testes da defesa A (D7).
+- [ ] A pasta `dist/` (Q9) continua valendo depois da Q13 ("tudo tem que estar empacotado")? *(aberta Q-A11; padrão: pasta `dist/`, D26)*
 - [ ] Qual a ordem dos eventos dentro de um tick? *(aberta Q-A10; padrão em design.md §6)*
 - [ ] O `id` é sempre numérico (afeta a ordem do eixo Y)? *(aberta Q-A6; padrão: string, ordem natural, D4)*
 - [ ] Cores repetidas no arquivo geram erro ou aviso? *(aberta Q-A7; padrão: aviso, D17)*

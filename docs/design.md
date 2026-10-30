@@ -123,7 +123,7 @@ OS-Simulator/
 | D4 | ID | `std::string` única, sem diferenciar caixa. Eixo Y em **ordem natural** (numérico se ambos numéricos; senão lexicográfico) | O B usa `BS01`, `PS02`…; A2.5 exige ordem por ID |
 | D5 | Ocorrência (job) | `Task.jobs` é `std::vector<Job>` (frente = ocorrência corrente). Se o próximo período chega antes de a anterior terminar, a ativação é **enfileirada**, não descartada | A3.3: a tarefa que perde o prazo continua executando; descartar ativações esconderia a sobrecarga |
 | D6 | Fim | Cada periódica libera exatamente 10 ocorrências (`PERIODIC_ACTIVATION_LIMIT`) e termina quando as 10 concluem; simulação acaba quando todas as não ignoradas estão `Terminated` | A4.4 |
-| D7 | Fora do escopo do A | `periodo == 0` (aperiódica), `periodo < 0` (esporádica) ou ID `BSxx/PSxx/DSxx/SSxx`: **carregadas, marcadas `ignored`, não simuladas, listadas no relatório de carga como aviso** | A4.4 + A3.3.7 (arquivo válido nunca falha). No B basta desligar a flag |
+| D7 | Fora do escopo do A | `periodo == 0` (aperiódica): **carregada, marcada `ignored`, não simulada, listada no relatório de carga como aviso**. `periodo < 0`: **erro do arquivo** no A (Q10). ID `BSxx/PSxx/DSxx/SSxx` com `periodo > 0`: **tarefa periódica comum** no A, sem política de servidor (Q12) | A4.4 + A3.3 ("valores menores que zero representam erros no arquivo") + respostas Q10 e Q12. No B: `ignored` deixa de valer para aperiódicas, `periodo < 0` vira esporádica (B1.3) e o prefixo do ID liga a política de servidor (B2) |
 | D8 | Prazo | Relativo à ativação; absoluto = `release + prazo`. Campo vazio ou 0 ⇒ `prazo = período`. Prazo > período: aceito com aviso | A3.2 (padrões) |
 | D9 | Perda de prazo | Detectada no instante `absDeadline` se `remaining > 0`, **uma vez por ocorrência**; a ocorrência continua | A3.3. Quem termina exatamente em `absDeadline` não perde (término é processado antes) |
 | D10 | Multiprocessador | **Escalonamento global**, fila única. A cada instante escolhem-se as M melhores (M = nº de CPUs). Quem já executa e foi escolhido **permanece na mesma CPU**; novos vão para CPU livre, preferindo a última usada | A1.2 (fila global, sem ociosidade); minimiza trocas de contexto e migrações |
@@ -133,7 +133,7 @@ OS-Simulator/
 | D14 | Desempate (A4.3) | Ordem: (1) estava `Running` antes do escalonamento; (2) menor prazo **absoluto** da ocorrência corrente; (3) menor ingresso; (4) menor duração; (5) **sorteio determinístico** `tieHash(seed, tick, taskIndex)` (splitmix64), sem estado. Ícone de dado em `x=k` na tarefa escolhida. Só se emite o ícone quando o sorteio realmente decide algo (`|grupo empatado| > slotsLeft`) | Sem estado ⇒ retroceder/avançar e re-simular após edição reproduzem o mesmo sorteio; evita guardar `mt19937` (~2,5 KB) em cada snapshot; `std::uniform_int_distribution` não é portável entre compiladores |
 | D15 | Edição no passado | Editar no passo `k` descarta `history[k+1..]` e segue da nova linha do tempo; ícone "edição manual" em `x=k` | Causalidade: o futuro antigo deixou de valer |
 | D16 | Histórico | 1 snapshot completo por tick, em memória; sem threads | A1.5.2; sem threads não há corrida e o determinismo é trivial |
-| D17 | Cores | Hex RGB de 6 dígitos (tolera `#`, caixa livre). Cor ausente ⇒ paleta automática. Cor repetida ou preta ⇒ **aviso** | A2.1 exige cores distintas; preto é reservado ao suspenso |
+| D17 | Cores | Hex RGB de 6 dígitos (tolera `#`, caixa livre); fora disso é erro. Cor ausente ⇒ paleta automática. Cor repetida ou escura demais (preta) ⇒ **aviso**, e a tarefa recebe a próxima cor livre da paleta (ideia do Arthur) | A2.1 exige uma cor diferente por tarefa e reserva o preto para "suspensa": trocar a cor garante isso sem barrar um arquivo válido |
 | D18 | Erros de arquivo | **Fatal** (nada é carregado; mostra arquivo, linha, campo, valor, motivo) vs **aviso** (carrega e informa). Tolera espaços, linhas vazias, CRLF/LF, BOM UTF-8, `;` final opcional, campos opcionais ausentes | A3.3.3, A3.3.6, A3.3.7 |
 | D19 | Erro de redação do enunciado | A2.3 cita "requisito 1.4"; implementar o **1.5** | O conteúdo é sobre os modos de execução |
 | D20 | Código único A+B | Uma só árvore; entrega do A = tag `entrega-A`; B continua dali. Sem `Project-A/` e `Project-B/` | O B complementa o A; duas pastas geram divergência |
@@ -341,9 +341,11 @@ SchedDecision pickByKey(const SchedContext&, KeyFn key);             // aplica A
 
 **Linha de tarefa:** `id;cor;ingresso;duracao;periodo;prazo;lista_eventos` — `lista_eventos` = tudo depois do 6º `;` (D30). Obrigatórios: `id`, `ingresso`, `duracao`, `periodo`. Opcionais: `cor` (vazia ⇒ paleta automática HSL por razão áurea, evitando preto/branco e cores já usadas), `prazo` (vazio/0 ⇒ `periodo`), `lista_eventos`.
 
-**Erros fatais** (mensagem: linha, campo, valor, motivo, o que seria válido): menos de 2 linhas úteis; algoritmo desconhecido; `quantum`/`qtde_cpus` inválidos; `id` vazio ou duplicado (sem caixa); `cor` fora de `RRGGBB`; `ingresso < 0`; `duracao ≤ 0`; `periodo` não inteiro; `prazo < 0`; número não inteiro ou > 10⁹; campos obrigatórios ausentes; nenhuma tarefa simulável (todas ignoradas ou nenhuma).
+**Erros fatais** (mensagem: linha, campo, valor, motivo, o que seria válido): menos de 2 linhas úteis; algoritmo desconhecido; `quantum`/`qtde_cpus` inválidos; `id` vazio ou duplicado (sem caixa); `cor` fora de `RRGGBB`; `ingresso < 0`; `duracao ≤ 0`; `periodo` não inteiro; **`periodo < 0` (Q10: erro no A; esporádica só no B)**; `prazo < 0`; número não inteiro ou > 10⁹; campos obrigatórios ausentes; nenhuma tarefa simulável (todas ignoradas ou nenhuma).
 
-**Avisos:** tarefa ignorada (aperiódica, esporádica, servidor — D7); cor repetida ou preta; `prazo > periodo`; `duracao > periodo`; `lista_eventos` não vazia (guardada); campos opcionais ausentes (padrão aplicado).
+**Avisos:** tarefa aperiódica ignorada (D7); cor repetida ou preta (a tarefa recebe outra cor, D17); `prazo > periodo`; `duracao > periodo`; `lista_eventos` não vazia (guardada); campos opcionais ausentes (padrão aplicado). IDs com prefixo de servidor **não** geram aviso nem tratamento especial no A (Q12).
+
+**Tabela de mensagens** (ideia do Arthur, mantida): cada mensagem tem um código (`MsgCode`) ligado à severidade (erro/aviso) e a um modelo de texto com `{}` (`MESSAGES`); `addMessage` monta o texto. Assim a severidade de cada caso fica num único lugar, fácil de mudar se o professor responder diferente. Todos os campos de uma linha são validados, para o usuário ver **todos** os erros de uma vez.
 
 **Robustez:** nunca lançar exceção para o chamador; arquivo vazio, binário, linha gigante e 100 000 tarefas devem retornar resultado sensato. Todo arquivo que obedeça ao formato **deve** carregar (A3.3.7).
 
@@ -472,7 +474,7 @@ Resumo; o detalhe (cenários, entradas e saídas esperadas) está em `testes.md`
 
 ## 14. Ganchos já previstos para o Projeto B
 
-- `TaskKind`/`ServerType` e prefixos `BS/PS/DS/SS` já reconhecidos (D7); `ignored` é só uma flag.
+- `TaskKind`/`ServerType` já existem no modelo; no A o prefixo `BS/PS/DS/SS` não é interpretado (Q12) e `ignored` (aperiódicas) é só uma flag. No B: reconhecer o prefixo no parser e `periodo < 0` como esporádica.
 - `Task.rawEvents` guarda `lista_eventos`; o B acrescenta `std::vector<TaskEvent>` sem limite de tamanho.
 - `Suspended` com `blockReason` e `effPriority` separada de `basePriority` ⇒ mutex, herança/teto de prioridade, inversão de prioridades, E/S, troca de dados.
 - Fila global de aperiódicas acessada pelos servidores; servidor = `Task` periódica com `serverBudget` (reposição no B). `SchedContext` pode ganhar campos sem quebrar RM/EDF.
