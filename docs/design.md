@@ -461,6 +461,15 @@ Numerar cada elemento nos comentários: `// [TELA 1 / E1.3] origem: history[curs
 
 Requisitos de usabilidade (A5): botões habilitados só quando fazem sentido; toda recusa e todo erro em português claro com o motivo; nunca travar a janela (limite em `runToEnd`).
 
+**Como ficou (Fase 6):**
+- **Tela 1:** barra em duas linhas (controle: abrir, reiniciar, retroceder, avançar, play/pausa, executar até o fim; ajustes: ir para o instante N, velocidade em ms/passo, modo, zoom, exportar). Botões só com texto (símbolos dependem da fonte). Atalhos: Ctrl+O, Ctrl+S, Ctrl+E, Ctrl+R, Ctrl+←/→, F5 (até o fim), F6 (play), Ctrl+N (nova tarefa), Ctrl +/- (zoom). Docks: estado do sistema (inclui os intervalos em que cada CPU ficou desligada, A1.2), tabela de TCBs com todas as colunas (aperiódica aparece cinza, como "Ignorada"), detalhe da tarefa + botões de estado, registro (até 5 000 linhas). Mensagens não bloqueiam a janela.
+- **Tela 2** aparece só se houver erros ou avisos (sem nada a relatar, o carregamento vai só para o registro).
+- **Modo completo:** ao escolher (ou ao abrir um arquivo nesse modo) executa até o fim e mostra o resultado final; a navegação continua disponível.
+- **Fim da simulação:** ao chegar ao último instante (por qualquer caminho) exporta PNG + SVG uma vez por linha do tempo (de novo só depois de uma edição), com cursor de espera, e abre a Tela 6. Pasta: a escolhida na Tela 5 → a do arquivo de configuração → Documentos.
+- **Parada sem fim:** se só restam tarefas suspensas que não mudam mais (`stalled`), "executar até o fim" para com mensagem pedindo para retomá-las ou forçar o término.
+- **`main.cpp`:** `sim_gui <arquivo>` abre já carregado; `sim_gui --exportar <arquivo> <pasta>` gera as imagens sem janela (plano B da defesa e teste do `dist/`).
+- Classes da interface sem `Q_OBJECT` (conexões por lambda): não precisam de `moc` próprio.
+
 ---
 
 ## 12. Convenções de código

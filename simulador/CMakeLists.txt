@@ -16,7 +16,8 @@
 #     5) Gerar a pasta standalone (sim_gui.exe + DLLs + plugins do Qt), que roda
 #        sem instalar nada (RG5, resposta do professor Q9):
 #          cmake --install build --prefix dist
-#        e executar dist\sim_gui.exe.
+#        e executar dist\sim_gui.exe. Sem janela (plano B da defesa):
+#          dist\sim_gui.exe --exportar exemplo_rm.txt <pasta>
 #
 #   Linux (g++ e Qt 6 do sistema):
 #     cmake -S . -B build && cmake --build build && ./build/sim_tests
@@ -125,10 +126,13 @@ endif()
 if(BUILD_GUI AND Qt6_FOUND)
     message(STATUS "Qt ${Qt6_VERSION} encontrado: a interface sim_gui será compilada.")
 
-    # Fontes da interface. GanttRenderer.* (Fase 5): desenho único do Gantt
-    # para tela, PNG e SVG. A Fase 6 acrescenta MainWindow.* e Dialogs.h.
+    # Fontes da interface: janela principal (Tela 1), diálogos (Telas 2 a 6)
+    # e o desenho único do Gantt para tela, PNG e SVG (A2.4).
     add_executable(sim_gui
         main.cpp
+        MainWindow.cpp
+        MainWindow.h
+        Dialogs.h
         GanttRenderer.cpp
         GanttRenderer.h
     )

@@ -828,6 +828,10 @@ bool GanttRenderer::exportPng(const QString& path, const std::vector<SystemSnaps
     return true;
 }
 
+QString GanttRenderer::occurrenceText(OccurrenceType type) {
+    return occurrenceName(type);
+}
+
 QString GanttRenderer::defaultBaseName(const QString& configName) {
     QString name = configName.isEmpty() ? QStringLiteral("simulacao") : configName;
     return QStringLiteral("gantt_%1_%2").arg(name, QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")));

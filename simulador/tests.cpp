@@ -1329,6 +1329,22 @@ static void testRunToEnd() {
     CHECK(!byMemory.finished);
     CHECK(byMemory.message.find("20 MB") != std::string::npos);
     CHECK(heavy.history().size() * estimateSnapshotBytes(heavy.current()) < (std::size_t(25) << 20));
+
+    // Tarefa suspensa e nunca retomada: a simulação não termina sozinha. runToEnd
+    // para assim que nada mais pode mudar (achado no teste da interface, Fase 6),
+    // depois de registrar todas as ativações e perdas de prazo dela.
+    Simulator stuck = loadSim(G1_TEXT);
+    stepTo(stuck, 4);
+    CHECK(stuck.applyEdit(makeEdit(EditKind::Suspend, 0)).ok);
+    const RunSummary byStall = stuck.runToEnd();
+    CHECK(!byStall.finished);
+    CHECK(byStall.message.find("suspensas (1)") != std::string::npos);
+    CHECK(stalled(stuck.current()));
+    CHECK_EQ(stuck.current().tasks[0].released, PERIODIC_ACTIVATION_LIMIT);
+    CHECK_EQ(stuck.current().tasks[0].deadlineMisses, PERIODIC_ACTIVATION_LIMIT - 1);  // a 1ª ocorrência terminou em 1
+    CHECK(stuck.current().tick < 100);
+    CHECK(!stalled(loadSim(G1_TEXT).current()));
+    CHECK(noViolations(checkInvariants(stuck.history())));
 }
 
 // Fuzz de edições: sequências aleatórias de avançar/voltar/pular/editar em

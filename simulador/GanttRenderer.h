@@ -105,6 +105,9 @@ public:
 
     // Nome padrão dos arquivos: gantt_<configuração>_<aaaammdd-hhmmss> (sem extensão).
     static QString defaultBaseName(const QString& configName);
+
+    // Nome de cada ocorrência em português (tooltip, registro de eventos da janela).
+    static QString occurrenceText(OccurrenceType type);
 };
 
 // Widget do Gantt na janela: área com rolagem (H/V), zoom (Ctrl+roda ou
