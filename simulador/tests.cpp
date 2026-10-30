@@ -10,7 +10,8 @@
 //   - Fase 3: motor (G1–G4, FIFO, invariantes 1–9, fuzz). 'sim_tests --rapido' roda o fuzz
 //     com 500 sistemas (dia a dia); 'sim_tests --grid'
 //     imprime as grades de G1, G2 e G3.
-//   - Fase 4: G5, G6 e invariante 10.
+//   - Fase 4: G5, G6, invariante 10, cada tipo de edição, limites do
+//     runToEnd e fuzz de edições.
 //
 // Por quê assim:
 //   - Sem GoogleTest ou outra biblioteca: a macro CHECK abaixo basta e evita
@@ -1053,6 +1054,356 @@ static void testFuzz(int systems) {
     std::cout << "  (fuzz: " << systems << " sistemas, " << snapshots << " snapshots verificados)\n";
 }
 
+// -----------------------------------------------------------------------------
+// Fase 4: histórico, navegação e edição (docs/testes.md G5, G6, invariante 10).
+// -----------------------------------------------------------------------------
+
+// Carrega um texto de configuração num Simulator novo.
+static Simulator loadSim(const std::string& text) {
+    Simulator sim;
+    ParseResult parsed = parser::parseConfig(text);
+    CHECK(parsed.ok());
+    CHECK(sim.load(parsed.config));
+    return sim;
+}
+
+// Edição pronta para uma tarefa (ou para o sistema, com taskIndex = -1).
+static Edit makeEdit(EditKind kind, int taskIndex = -1, long long value = 0, const std::string& text = "") {
+    Edit e;
+    e.kind = kind;
+    e.taskIndex = taskIndex;
+    e.value = value;
+    e.text = text;
+    return e;
+}
+
+// Texto de TODO o histórico + cursor: para provar que algo não mudou nada.
+static std::string fingerprint(const Simulator& sim) {
+    std::string out = "cursor=" + std::to_string(sim.cursor()) + "\n";
+    for (const SystemSnapshot& s : sim.history()) out += serializeSnapshot(s);
+    return out;
+}
+
+// Uma edição que DEVE ser recusada: ok = false, motivo em português, e o
+// histórico e o cursor exatamente como estavam (critério da Fase 4).
+static void expectRefused(Simulator& sim, const Edit& edit, const std::string& reasonPart) {
+    const std::string before = fingerprint(sim);
+    const EditResult result = sim.applyEdit(edit);
+    CHECK(!result.ok);
+    CHECK(!result.message.empty());
+    CHECK(result.message.find(reasonPart) != std::string::npos);
+    if (result.message.find(reasonPart) == std::string::npos) std::cerr << "  mensagem: " << result.message << "\n";
+    CHECK(fingerprint(sim) == before);
+}
+
+// Avança até o cursor chegar a 'k'.
+static void stepTo(Simulator& sim, std::size_t k) {
+    while (sim.cursor() < k && sim.stepForward()) {
+    }
+}
+
+// G5 — suspender em 4 e retomar em 9, sobre G1 (A3.4, D15, D28).
+static void testGoldenG5() {
+    const int T1 = 0, T2 = 1;
+    Simulator sim = loadSim(G1_TEXT);
+    stepTo(sim, 4);
+    CHECK(sim.applyEdit(makeEdit(EditKind::Suspend, T1)).ok);
+    CHECK_EQ(sim.history().size(), 5u);                      // futuro descartado (D15)
+    CHECK_EQ(sim.cursor(), 4u);
+    CHECK(sim.history()[4].tasks[T1].state == TaskState::Suspended);
+    CHECK_EQ(countOccIn(sim.history(), OccurrenceType::ManualEdit, T1, 4, 5), 1);
+    CHECK(!sim.history()[4].cpus[0].on);                     // CPU desligada no tick 4
+
+    stepTo(sim, 9);
+    CHECK(sim.applyEdit(makeEdit(EditKind::Resume, T1)).ok);
+    stepTo(sim, 12);
+    const std::vector<SystemSnapshot>& h = sim.history();
+    std::string grid;
+    for (Tick k = 4; k < 12; ++k) grid += (grid.empty() ? "" : " ") + taskOn(h, k, 0);
+    CHECK_EQ(grid, std::string("- - 2 2 - 1 1 -"));
+    CHECK(occTicks(h, OccurrenceType::DeadlineMiss, T1) == std::vector<Tick>({8}));  // ocorrência 2 (prazo 8)
+    CHECK_EQ(occNote(h, 8, OccurrenceType::Arrival, T1), std::string("enfileirada"));  // ocorrência 3, ainda suspensa
+    CHECK(occTicks(h, OccurrenceType::Termination, T1) == std::vector<Tick>({1, 10, 11}));  // 2ª em 10, 3ª em 11 (prazo 12)
+    CHECK(occTicks(h, OccurrenceType::Termination, T2) == std::vector<Tick>({3, 8}));  // T2 não é afetada
+    CHECK(noViolations(checkInvariants(h)));
+
+    // Recusas: nada muda em nenhuma delas.
+    Simulator done = loadSim(G1_TEXT);
+    done.runToEnd();
+    expectRefused(done, makeEdit(EditKind::Suspend, T1), "já terminou");
+    Simulator early = loadSim(G1_TEXT);
+    stepTo(early, 2);
+    expectRefused(early, makeEdit(EditKind::SetArrival, T1, 5), "já ingressou");
+    stepTo(early, 4);  // T1 tem ocorrência pendente (duração 1)
+    expectRefused(early, makeEdit(EditKind::SetRemaining, T1, 0), "entre 1 e 1");
+    expectRefused(early, makeEdit(EditKind::SetRemaining, T1, 2), "entre 1 e 1");
+    expectRefused(early, makeEdit(EditKind::SetCpuCount, -1, 0), "entre 1 e 64");
+    expectRefused(early, makeEdit(EditKind::SetCpuCount, -1, MAX_CPUS + 1), "entre 1 e 64");
+    Edit duplicate = makeEdit(EditKind::AddTask);
+    duplicate.newTask.id = "1";
+    duplicate.newTask.arrival = 10;
+    duplicate.newTask.duration = 1;
+    duplicate.newTask.period = 5;
+    expectRefused(early, duplicate, "já é usado");
+}
+
+// G6 — retroceder/avançar e edição no passado (A1.5.2, invariante 10).
+static void testGoldenG6() {
+    const std::vector<SystemSnapshot> direct = runConfig(G3_TEXT);
+    Simulator sim = loadSim(G3_TEXT);
+    for (int i = 0; i < 30; ++i) sim.stepForward();
+    const std::string afterFirstPass = fingerprint(sim);
+    for (int i = 0; i < 30; ++i) sim.stepBack();
+    CHECK_EQ(sim.cursor(), 0u);
+    CHECK(!sim.stepBack());                                  // não passa do instante 0
+    for (int i = 0; i < 30; ++i) sim.stepForward();
+    CHECK(fingerprint(sim) == afterFirstPass);               // invariante 10
+    bool sameAsDirect = true;
+    for (std::size_t k = 0; k <= 30; ++k) {
+        sameAsDirect = sameAsDirect && serializeSnapshot(sim.history()[k]) == serializeSnapshot(direct[k]);
+    }
+    CHECK(sameAsDirect);
+
+    // jumpTo para trás e para a frente; o relógio acompanha o cursor.
+    for (Tick k : {5, 25, 0, 30, 38}) {  // G3 termina no instante 40
+        CHECK(sim.jumpTo(k));
+        CHECK_EQ(sim.current().tick, k);
+    }
+    CHECK(!sim.jumpTo(-1));
+    CHECK(!sim.jumpTo(1000000));                             // termina antes
+    CHECK(sim.isFinished());
+
+    // Editar no passado: futuro descartado e nova linha do tempo determinística.
+    auto editAt10 = [](Simulator& s) {
+        s.jumpTo(10);
+        CHECK(s.applyEdit(makeEdit(EditKind::Suspend, 0)).ok);
+        CHECK_EQ(s.history().size(), 11u);
+        for (int i = 0; i < 20; ++i) s.stepForward();
+    };
+    Simulator a = loadSim(G3_TEXT), b = loadSim(G3_TEXT);
+    a.runToEnd();
+    editAt10(a);
+    editAt10(b);
+    CHECK(fingerprint(a) == fingerprint(b));
+    CHECK(noViolations(checkInvariants(a.history())));
+
+    // reset volta ao instante 0 e descarta o resto.
+    a.reset();
+    CHECK_EQ(a.history().size(), 1u);
+    CHECK_EQ(a.current().tick, 0);
+}
+
+// Cada tipo de edição: o caminho aceito e as recusas principais (design §9).
+static void testEditKinds() {
+    const int T1 = 0, T2 = 1;
+
+    // Duas edições no MESMO instante: a 2ª não pode apagar a 1ª.
+    Simulator two = loadSim(G1_TEXT);
+    stepTo(two, 4);
+    CHECK(two.applyEdit(makeEdit(EditKind::Suspend, T1)).ok);
+    CHECK(two.applyEdit(makeEdit(EditKind::SetQuantum, -1, 5)).ok);
+    CHECK(two.current().tasks[T1].state == TaskState::Suspended);
+    CHECK_EQ(two.current().quantum, 5);
+    CHECK_EQ(countOccIn(two.history(), OccurrenceType::ManualEdit, -1, 4, 5), 2);
+
+    // Edição no instante 0 (não existe history[-1]: parte da Config).
+    Simulator zero = loadSim(G1_TEXT);
+    CHECK(zero.applyEdit(makeEdit(EditKind::SetCpuCount, -1, 2)).ok);
+    CHECK_EQ(zero.current().cpus.size(), 2u);
+    CHECK(zero.current().tasks[T2].state == TaskState::Running);  // as duas executam já em 0
+    CHECK(zero.applyEdit(makeEdit(EditKind::Suspend, T2)).ok);
+    CHECK_EQ(zero.current().cpus.size(), 2u);                     // a 1ª edição continua valendo
+    CHECK(noViolations(checkInvariants(zero.history())));
+
+    // SetRemaining (G2: T2 tem duração 4) e ForceFinish / Remove.
+    Simulator s = loadSim("RM;2;1\n" + G2_TASKS);
+    stepTo(s, 2);
+    CHECK(s.applyEdit(makeEdit(EditKind::SetRemaining, T2, 1)).ok);
+    s.stepForward();
+    CHECK_EQ(occTicks(s.history(), OccurrenceType::Termination, T2).front(), 3);  // terminou antes
+    CHECK(s.applyEdit(makeEdit(EditKind::ForceFinish, T1)).ok);
+    CHECK(s.current().tasks[T1].state == TaskState::Terminated);
+    CHECK_EQ(countOccIn(s.history(), OccurrenceType::TaskFinished, T1, 3, 4), 1);
+    expectRefused(s, makeEdit(EditKind::ForceFinish, T1), "já terminou");
+    CHECK(s.applyEdit(makeEdit(EditKind::Remove, T2)).ok);
+    CHECK(s.isFinished());
+    expectRefused(s, makeEdit(EditKind::Resume, 7), "inexistente");
+
+    // ActivateNow, SetArrival, SetDuration, SetPeriod, SetDeadline.
+    Simulator p = loadSim("RM;2;1\n1;FF0000;0;1;10;10\n2;00FF00;5;1;10;10\n");
+    stepTo(p, 2);                                             // T1 dormente, T2 ainda não chegou
+    expectRefused(p, makeEdit(EditKind::ActivateNow, T2), "ainda não ingressou");
+    CHECK(p.applyEdit(makeEdit(EditKind::ActivateNow, T1)).ok);
+    CHECK_EQ(occNote(p.history(), 2, OccurrenceType::Arrival, T1), std::string("ativação manual"));
+    CHECK_EQ(p.current().tasks[T1].nextRelease, 12);           // o período passa a contar daqui
+    expectRefused(p, makeEdit(EditKind::SetArrival, T2, 1), "passado");
+    CHECK(p.applyEdit(makeEdit(EditKind::SetArrival, T2, 2)).ok);  // ingresso = agora: ativa já
+    CHECK(p.current().tasks[T2].state != TaskState::NotArrived);
+    CHECK(p.applyEdit(makeEdit(EditKind::SetDuration, T1, 3)).ok);
+    CHECK_EQ(p.current().tasks[T1].jobs.front().duration, 1);  // a corrente não muda
+    expectRefused(p, makeEdit(EditKind::SetDuration, T1, 0), "entre 1");
+    CHECK(p.applyEdit(makeEdit(EditKind::SetPeriod, T1, 4)).ok);
+    CHECK_EQ(p.current().tasks[T1].nextRelease, 6);            // última ativação (2) + 4
+    p.stepForward();
+    p.stepForward();                                          // instante 4: T2 ainda pendente?
+    Simulator d = loadSim("RM;2;1\n1;FF0000;0;5;20;20\n");
+    stepTo(d, 3);
+    CHECK(d.applyEdit(makeEdit(EditKind::SetDeadline, T1, 2)).ok);  // prazo absoluto vira 2 < 3
+    CHECK_EQ(countOccIn(d.history(), OccurrenceType::DeadlineMiss, T1, 3, 4), 1);  // perda registrada agora
+    CHECK(noViolations(checkInvariants(p.history())));
+    CHECK(noViolations(checkInvariants(d.history())));
+
+    // SetColor (mesmas regras do arquivo, D17).
+    Simulator c = loadSim(G1_TEXT);
+    CHECK(c.applyEdit(makeEdit(EditKind::SetColor, T1, 0, "#00aa00")).ok);
+    CHECK_EQ(c.current().tasks[T1].color, std::string("00AA00"));
+    expectRefused(c, makeEdit(EditKind::SetColor, T1, 0, "0000ff"), "já é usada");
+    expectRefused(c, makeEdit(EditKind::SetColor, T1, 0, "101010"), "escura");
+    expectRefused(c, makeEdit(EditKind::SetColor, T1, 0, "FAFAFA"), "clara");
+    expectRefused(c, makeEdit(EditKind::SetColor, T1, 0, "GG0000"), "RRGGBB");
+
+    // SetAlgorithm, SetQuantum, SetSeed.
+    CHECK(c.applyEdit(makeEdit(EditKind::SetAlgorithm, -1, 0, "edf")).ok);
+    CHECK_EQ(c.current().algorithm, std::string("EDF"));
+    expectRefused(c, makeEdit(EditKind::SetAlgorithm, -1, 0, "XYZ"), "disponíveis");
+    expectRefused(c, makeEdit(EditKind::SetQuantum, -1, 0), "quantum");
+    CHECK(c.applyEdit(makeEdit(EditKind::SetSeed, -1, 7)).ok);
+    CHECK_EQ(c.current().seed, 7u);
+    expectRefused(c, makeEdit(EditKind::SetSeed, -1, -1), "semente");
+
+    // SetCpuCount: ao reduzir, quem estava na CPU removida é preemptada.
+    Simulator m = loadSim(G3_TEXT);
+    stepTo(m, 1);
+    CHECK(m.applyEdit(makeEdit(EditKind::SetCpuCount, -1, 1)).ok);
+    CHECK_EQ(m.current().cpus.size(), 1u);
+    CHECK_EQ(countOccIn(m.history(), OccurrenceType::Preemption, -1, 1, 2), 1);
+    CHECK_EQ(occNote(m.history(), 1, OccurrenceType::Preemption, m.history()[0].cpus[1].taskIndex),
+             std::string("CPU removida"));
+    CHECK(m.applyEdit(makeEdit(EditKind::SetCpuCount, -1, 3)).ok);  // ao aumentar, as 3 executam
+    CHECK_EQ(m.current().cpus.size(), 3u);
+    m.runToEnd();
+    CHECK(noViolations(checkInvariants(m.history())));
+
+    // AddTask: mesmas validações do parser; ingresso no passado é recusado.
+    Simulator n = loadSim(G1_TEXT);
+    stepTo(n, 3);
+    Edit add = makeEdit(EditKind::AddTask);
+    add.newTask.id = "3";
+    add.newTask.arrival = 3;
+    add.newTask.duration = 1;
+    add.newTask.period = 5;
+    CHECK(n.applyEdit(add).ok);
+    CHECK_EQ(n.current().tasks.size(), 3u);
+    CHECK(n.current().tasks[2].state == TaskState::Running);   // ingresso = agora: já executa
+    CHECK(!n.current().tasks[2].color.empty());                // cor automática (D17)
+    CHECK_EQ(n.current().tasks[2].deadline, 5);                // prazo padrão = período (D8)
+    add.newTask.id = "4";
+    add.newTask.arrival = 1;
+    expectRefused(n, add, "passado");
+    add.newTask.arrival = 9;
+    add.newTask.color = "XYZ";
+    expectRefused(n, add, "Nova tarefa");
+    n.runToEnd();
+    CHECK(noViolations(checkInvariants(n.history())));
+}
+
+// runToEnd: termina, ou para por limite de instantes ou de memória, sem travar.
+static void testRunToEnd() {
+    Simulator g1 = loadSim(G1_TEXT);
+    const RunSummary full = g1.runToEnd();
+    CHECK(full.finished);
+    CHECK_EQ(full.ticks, g1.current().tick);
+    CHECK(full.message.find("concluída") != std::string::npos);
+
+    Simulator longRun = loadSim("RM;2;1\n1;FF0000;0;1;1000000;1000000\n");
+    const RunSummary byTicks = longRun.runToEnd(1000);
+    CHECK(!byTicks.finished);
+    CHECK_EQ(byTicks.ticks, 1000);
+    CHECK(byTicks.message.find("limite de 1000 instantes") != std::string::npos);
+    CHECK(longRun.stepForward());                             // dá para continuar daqui
+
+    std::string many = "EDF;2;2\n";
+    for (int i = 0; i < 2000; ++i) many += "T" + std::to_string(i) + ";;0;1;1000\n";
+    Simulator heavy = loadSim(many);
+    const RunSummary byMemory = heavy.runToEnd(DEFAULT_MAX_TICKS, std::size_t(20) << 20);  // 20 MB
+    CHECK(!byMemory.finished);
+    CHECK(byMemory.message.find("20 MB") != std::string::npos);
+    CHECK(heavy.history().size() * estimateSnapshotBytes(heavy.current()) < (std::size_t(25) << 20));
+}
+
+// Fuzz de edições: sequências aleatórias de avançar/voltar/pular/editar em
+// sistemas aleatórios. Toda recusa deixa histórico e cursor intactos; no fim,
+// as invariantes valem em todo o histórico e repetir a sequência dá o mesmo
+// resultado (determinismo, também depois de edições).
+static void testEditFuzz(int systems) {
+    uint64_t state = 31102026;
+    int failures = 0;
+    int accepted = 0, refused = 0;
+    static const char* texts[] = {"RM", "edf", "XYZ", "FF00AA", "#33cc33", "000000", "GG0000"};
+    for (int n = 0; n < systems && failures == 0; ++n) {
+        const int taskCount = fuzzRange(state, 1, 6);
+        std::string text = std::string(fuzzRange(state, 0, 1) ? "EDF" : "RM") + ";2;" +
+                           std::to_string(fuzzRange(state, 1, 3)) + "\n";
+        for (int i = 0; i < taskCount; ++i) {
+            const int period = fuzzRange(state, 2, 12);
+            text += "T" + std::to_string(i) + ";;" + std::to_string(fuzzRange(state, 0, 6)) + ";" +
+                    std::to_string(fuzzRange(state, 1, period)) + ";" + std::to_string(period) + ";" +
+                    std::to_string(fuzzRange(state, 1, 2 * period)) + "\n";
+        }
+        // A mesma sequência é aplicada em dois simuladores (determinismo).
+        const uint64_t opsSeed = fuzzNext(state);
+        Simulator sims[2] = {loadSim(text), loadSim(text)};
+        for (Simulator& sim : sims) {
+            uint64_t ops = opsSeed;
+            for (int op = 0; op < 40; ++op) {
+                const int what = fuzzRange(ops, 0, 9);
+                if (what <= 3) {
+                    for (int i = fuzzRange(ops, 1, 5); i > 0; --i) sim.stepForward();
+                } else if (what == 4) {
+                    sim.stepBack();
+                } else if (what == 5) {
+                    sim.jumpTo(fuzzRange(ops, 0, static_cast<int>(sim.history().size()) + 5));
+                } else {
+                    Edit e = makeEdit(static_cast<EditKind>(fuzzRange(ops, 0, 15)),
+                                      fuzzRange(ops, -1, static_cast<int>(sim.current().tasks.size())),
+                                      fuzzRange(ops, -2, 25), texts[fuzzRange(ops, 0, 6)]);
+                    e.newTask.id = fuzzRange(ops, 0, 3) == 0 ? "T0" : "N" + std::to_string(op);
+                    e.newTask.arrival = sim.current().tick + fuzzRange(ops, -1, 4);
+                    e.newTask.duration = fuzzRange(ops, 1, 4);
+                    e.newTask.period = fuzzRange(ops, 0, 12);
+                    e.newTask.deadline = fuzzRange(ops, 0, 12);
+                    const std::string before = fingerprint(sim);
+                    const EditResult r = sim.applyEdit(e);
+                    if (r.ok) {
+                        ++accepted;
+                    } else {
+                        ++refused;
+                        if (r.message.empty() || fingerprint(sim) != before) {
+                            ++failures;
+                            std::cerr << "  fuzz de edição: recusa alterou o estado ou veio sem motivo\n" << text;
+                        }
+                    }
+                }
+            }
+            sim.runToEnd(5000);
+            std::vector<std::string> problems = checkInvariants(sim.history());
+            if (!problems.empty()) {
+                ++failures;
+                std::cerr << "  fuzz de edição: sistema " << n << " violou invariantes:\n" << text;
+                for (std::size_t k = 0; k < problems.size() && k < 5; ++k) std::cerr << "    " << problems[k] << "\n";
+            }
+        }
+        if (fingerprint(sims[0]) != fingerprint(sims[1])) {
+            ++failures;
+            std::cerr << "  fuzz de edição: a mesma sequência deu históricos diferentes\n" << text;
+        }
+    }
+    CHECK_EQ(failures, 0);
+    CHECK(accepted > 0 && refused > 0);
+    std::cout << "  (fuzz de edição: " << systems << " sistemas, " << accepted << " edições aceitas, "
+              << refused << " recusadas)\n";
+}
+
 // Executa todos os testes e imprime o placar "N checks, M falhas".
 int main(int argc, char* argv[]) {
     // 'sim_tests --grid': imprime as grades de G1, G2 (RM e EDF) e G3 e sai.
@@ -1091,6 +1442,11 @@ int main(int argc, char* argv[]) {
     testGoldenG4();
     testFifoExtensibility();
     testFuzz(quick ? 500 : 10000);
+    testGoldenG5();
+    testGoldenG6();
+    testEditKinds();
+    testRunToEnd();
+    testEditFuzz(quick ? 30 : 200);
 
     std::cout << g_checks << " checks, " << g_fails << " falhas\n";
     return g_fails == 0 ? 0 : 1;
