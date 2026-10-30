@@ -11,6 +11,7 @@ Simulador de escalonamento de tempo real (RM/EDF) com N CPUs, Gantt gráfico, pa
 4. `docs/testes.md` — cenários dourados calculados à mão, casos do parser, invariantes: define "pronto".
 5. `docs/checklist-A.md` e `docs/checklist-B.md` — rastreabilidade por requisito; marcar `[x]` só se **implementado e testado**.
 6. `docs/fluxo-git.md` — branches, merges, conflitos e correções de bug.
+7. `docs/roteiro-teste.md` — como compilar, rodar os testes e conferir a janela passo a passo.
 
 ## Stack
 C++17 · Qt 6 (Widgets + Svg) só na interface · CMake · Qt dinâmico + deploy em `dist/` (o professor confirmou que pasta com `.exe` + DLLs atende, desde que não exija instalar o Qt). Núcleo (`Model`, `Parser`, `Scheduler`, `Simulator`) é C++ puro, **sem Qt**, e compila como biblioteca `simcore`.
