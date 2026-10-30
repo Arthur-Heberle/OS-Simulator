@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <map>
 #include <string>
 #include <string_view>
@@ -85,6 +86,7 @@ struct Config {
     std::string algorithm = "RM";
     int quantum = 2;
     int cpuCount = 1;
+    uint64_t seed = 1;        // semente do sorteio (D14); alterável na interface
     std::vector<Task> tasks;  // file fields filled in; runtime fields keep their defaults
 };
 
