@@ -12,15 +12,16 @@ Cole no Claude Code, uma fase por vez:
 
 **Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); cada um integra a própria branch na `main` (PR opcional, sem aprovação obrigatória) e avisa o outro para ler as mudanças; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
 
-## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 5)
+## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 6)
 
 - **Fase 0:** concluída e integrada.
 - **Fase 1: integrada na `main`.** `Model.h` reúne `Task`, `Job`, `CPU`, `Occurrence`, `SystemSnapshot`, `Config`, `ParseResult` (com `ok()`), `Edit`/`EditKind`/`EditResult`, `MAX_CPUS` e as ajudas `currentJob`, `isCandidate`, `naturalIdLess` (por blocos); `Task.h`, `CPU.h`, `SystemSnapshot.h` e `Task.cpp` saíram. Declarados sem definição: `parser::serializeConfig` (Fase 2) e `Simulator::reset/jumpTo/runToEnd/applyEdit` + `RunSummary`/`DEFAULT_MAX_TICKS` (Fase 4). Em `tests.cpp`: `serializeSnapshot`, `checkInvariants` (invariantes 1, 2, 3, 4, 5, 7, 8), `taskOn`/`countOcc`/`occTicks`. Fixture `demoHistoryG1()` (instantes 0–12, montado à mão) em `Simulator.cpp`, marcado TEMPORÁRIO (remover na Fase 7). `sim_tests`: 71 checks.
 - **Fase 2: integrada na `main`.** `parseConfig` conforme §8 (exceções contidas, sinal `+`, paleta sem preto/branco, troca de cor quase preta/quase branca), `serializeConfig`, P1–P14 e robustez.
 - **Fase 3: integrada na `main`.** Motor completo (§6), G1–G4, G4b, FIFO, invariantes 1–9, fuzz de 10 000 sistemas; `sim_tests --grid` e `--rapido`.
 - **Fase 4: integrada na `main`.** Navegação, `runToEnd` com limites, `applyEdit` para as 16 `EditKind`, G5, G6, fuzz de edições. Núcleo completo (Fases 1–4).
-- **Fase 5: concluída na branch `fase-5-gantt`** (aguardando merge). `GanttRenderer.h/.cpp` (desenho único para tela/PNG/SVG no estilo das figuras 6.1–6.10 do Maziero, ícones de todas as ocorrências, legenda, exportação da simulação inteira com PNG em partes) e `GanttWidget` (rolagem, zoom, tooltip, destaque e rolagem até o instante atual, legenda fixa). `main.cpp` provisório: `sim_gui --gantt-demo <pasta>` exporta G1, G2 RM/EDF, G3, G5 e ~93 000 instantes; sem argumentos abre uma janela de demonstração. `simulador/`: 12 arquivos.
-- **Próxima:** Fase 6 (janela principal, diálogos, exportação automática ao fim).
+- **Fase 5: integrada na `main`.** `GanttRenderer` (tela/PNG/SVG no estilo do Maziero) e `GanttWidget`.
+- **Fase 6: concluída na branch `fase-6-janela`** (aguardando merge). `MainWindow.h/.cpp` (Tela 1), `Dialogs.h` (Telas 2–6), `main.cpp` definitivo (`--exportar`), `exemplo_rm.txt`, `exemplo_edf.txt`; núcleo: `stalled()` (runToEnd para quando só restam suspensas). `simulador/`: 17 arquivos (o 18º é o PDF das telas, Fase 8). `sim_tests`: 1299 checks.
+- **Próxima:** Fase 7 (endurecimento: checklist-A 100%, itens manuais restantes, remover `demoHistoryG1`, revisar comentários e mensagens).
 
 ## 1. Calendário (hoje = 23/10/2026; defesa do A = 09/11/2026)
 
@@ -207,9 +208,9 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 7. Criar `exemplo_rm.txt` e `exemplo_edf.txt` (aproveitar G1/G2/G3 e uma tarefa aperiódica para exercitar o aviso).
 
 **Critérios de aceitação**
-- [ ] Fluxo completo com os dois exemplos: abrir → passo a passo → retroceder → editar → completo → imagem.
-- [ ] Todas as telas mostram erros e recusas em português com o motivo.
-- [ ] Checklist manual de `testes.md` §7 (itens de GUI) executado.
+- [x] Fluxo completo com os dois exemplos: abrir → passo a passo → retroceder → editar → completo → imagem.
+- [x] Todas as telas mostram erros e recusas em português com o motivo.
+- [x] Checklist manual de `testes.md` §7 (itens de GUI) executado (pendrive/outra partição e VM ficam para a Fase 7).
 
 **Commit:** `GUI: janela principal, docks, diálogos de edição e exportação automática`.
 

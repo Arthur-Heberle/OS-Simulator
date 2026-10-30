@@ -16,7 +16,8 @@
 #     5) Gerar a pasta standalone (sim_gui.exe + DLLs + plugins do Qt), que roda
 #        sem instalar nada (RG5, resposta do professor Q9):
 #          cmake --install build --prefix dist
-#        e executar dist\sim_gui.exe.
+#        e executar dist\sim_gui.exe. Sem janela (plano B da defesa):
+#          dist\sim_gui.exe --exportar exemplo_rm.txt <pasta>
 #
 #   Linux (g++ e Qt 6 do sistema):
 #     cmake -S . -B build && cmake --build build && ./build/sim_tests
