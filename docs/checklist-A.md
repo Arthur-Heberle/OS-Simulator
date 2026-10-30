@@ -61,9 +61,9 @@
 - [ ] Testado num computador limpo, sem nada instalado. *(pendente: VM ou outro PC sem Qt)*
 
 ### RG6 — Comentários
-- [ ] Todo o código-fonte está comentado. *(pendente: revisão de comentários, Fase 7 passo 6)*
-- [ ] Os comentários explicam o que cada parte/função/componente faz. *(pendente: revisão, Fase 7 passo 6)*
-- [ ] Os comentários explicam as razões/justificativas de todas as decisões de implementação. *(pendente: revisão, Fase 7 passo 6)*
+- [x] Todo o código-fonte está comentado. *(varredura de funções sem comentário, 30/10)*
+- [x] Os comentários explicam o que cada parte/função/componente faz. *(idem)*
+- [ ] Os comentários explicam as razões/justificativas de todas as decisões de implementação. *(pendente: leitura da dupla; as decisões estão citadas como D1–D30 e Q-xx)*
 
 ---
 
