@@ -14,7 +14,7 @@
 - O projeto tem duas partes **incrementais**: o Projeto B complementa o A. Por isso o A deve ser feito já preparando o B.
 - Equipe: 2 alunos. Linguagem: C++17. Interface: Qt 6 Widgets. Repositório: `OS-Simulator`.
 - **Datas:** defesa do A em **09/11/26**; defesa do B em **07/12/26**. Data de submissão no Moodle: ver Moodle (não consta nos arquivos; entrega fora do prazo = nota ZERO).
-- Data de referência deste material: 23/10/2026.
+- Data de referência deste material: 23/10/2026 (respostas Q10–Q13 acrescentadas em 29/10/2026).
 
 ---
 
@@ -157,7 +157,7 @@ Regras específicas — Simulador de SO:
 
 ## 4. Respostas do professor às dúvidas (verbatim organizado)
 
-> Prof. = Prof. Marco Wehrmeister. Itens de Q1 a Q8 vêm de `duvidas_projeto_a.txt`; Q9 foi respondida depois.
+> Prof. = Prof. Marco Wehrmeister. Itens de Q1 a Q8 vêm de `duvidas_projeto_a.txt`; Q9 foi respondida depois; Q10 a Q12 foram enviadas pela equipe e respondidas juntas (registradas em 29/10/2026); Q13 é pergunta de outro aluno, respondida no canal da turma em 27/10/2026.
 
 **Q1 — Bibliotecas externas (ex.: SFML) são permitidas?**
 Prof.: "Não há nada no enunciado do trabalho que diga que não se pode usar biblioteca externa. O que está escrito é '… é necessário que o software criado possa ser executado SEM a necessidade de INSTALAR nenhuma biblioteca extra', ou seja, o executável gerado precisa ser 'standalone'." (referência dada: diferença entre standalone e installed executable).
@@ -197,6 +197,24 @@ Prof.: "Vocês decidem. O importante é vocês demonstrarem que sabem do que est
 Prof.: "**Atende desde que não seja preciso instalar o Qt antes de conseguir usar o software de vocês.**"
 → **Decisão fechada:** Qt dinâmico + deploy (pasta com `.exe` + DLLs + plugins) é aceito. Ver D26. Mesmo assim: testar a pasta em máquina/VM limpa, sem Qt.
 
+> Q10 a Q12 foram enviadas juntas. O professor abriu a resposta com: "Todas as respostas abaixo se referem a defesa A, conforme enunciad[o]". Cada resposta abaixo é o trecho correspondente, sem alteração.
+
+**Q10 — Período negativo é erro do arquivo (texto do A) ou tarefa esporádica a ser ignorada com aviso (texto do B)?**
+Prof.: "Sim no A é erro, no B tem suas particularidades"
+→ **Obrigação:** no Projeto A, `periodo < 0` é **erro do arquivo** (A3.3: "valores menores que zero representam erros no arquivo"), reportado com linha, campo, valor e motivo (A3.3.6). Um arquivo assim não obedece ao formato do A, então rejeitá-lo **não** fere A3.3.7. No B, o mesmo valor passa a indicar tarefa esporádica (B1.3). Resolve Q-A2.
+
+**Q11 — No desempate (2), "prazo da tarefa" é o prazo relativo do arquivo ou o prazo absoluto da ocorrência atual?**
+Prof.: "prazo absoluto da ocorrência atual"
+→ **Obrigação:** o critério (2) do A4.3 compara o **prazo absoluto da ocorrência corrente** (`ativação + prazo`). Confirma D14. Resolve Q-A3.
+
+**Q12 — Tarefas com ID `BSxx/PSxx/DSxx/SSxx` no Projeto A devem ser ignoradas com aviso, como as aperiódicas?**
+Prof.: "Se alguma delas elas [sic] é tarefa periódica e deve ser tratadas como tal. Se o servidor não for uma tarefa propriamente dita, no A, ignorar. ps. não vai ter esses tarefas [sic] nos casos de teste da defesa A"
+→ **Obrigação:** no A, o prefixo do ID **não** muda nada: uma linha `BSxx/PSxx/DSxx/SSxx` com `periodo > 0` é uma **tarefa periódica comum** (sem política de servidor). Só se ignora o que não for uma tarefa propriamente dita (ex.: `periodo = 0` já cai na regra das aperiódicas, A4.4; `periodo < 0` é erro, Q10). Esses IDs **não aparecem nos testes da defesa A**: baixa prioridade. Resolve Q-A4.
+
+**Q13 — RG5 com linguagem interpretada (ex.: Python + pygame): scripts e bibliotecas precisam ser empacotados em um binário estático?** *(pergunta de outro aluno, 27/10/2026)*
+Prof.: "Isso, tudo tem que estar empacotado"
+→ **Leitura da equipe:** reforça o RG5: nada pode ser instalado na máquina para rodar o simulador; tudo o que ele usa tem de ir junto. A resposta é sobre Python e **não revoga Q9**, que aceita explicitamente a pasta com `.exe` + DLLs do Qt (a pasta `dist/` já contém tudo e roda sem instalar nada). Como o aluno escreveu "binário estático" e o professor respondeu "Isso", há margem para dúvida: ver Q-A11 (§5).
+
 ---
 
 ## 5. Erros, ambiguidades e perguntas em aberto
@@ -204,15 +222,16 @@ Prof.: "**Atende desde que não seja preciso instalar o Qt antes de conseguir us
 | ID | Assunto | Situação | Padrão adotado até resposta (isolar em UM ponto do código) |
 |---|---|---|---|
 | Q-A1 | Zip: regras gerais dizem ZERO; fórum aceitou zip se >20 arquivos | **Aberta** | Entregar ≤ 18 arquivos soltos, sem zip. Pedir confirmação por escrito |
-| Q-A2 | `periodo < 0` no A: "erro do arquivo" (texto do A) vs "esporádica" (texto do B) | **Aberta** | Carregar com **aviso**, marcar como esporádica, **ignorar** na simulação (D7). Não é erro fatal (A3.3.7) |
-| Q-A3 | Desempate (2) "prazo da tarefa": relativo (campo `prazo`) ou absoluto da ocorrência? | **Aberta** | Prazo **absoluto** da ocorrência corrente (D14) |
-| Q-A4 | IDs `BSxx/PSxx/DSxx/SSxx` no A | **Aberta** | Tratar como servidor, **ignorar** com aviso (D7) |
+| Q-A2 | `periodo < 0` no A: "erro do arquivo" (texto do A) vs "esporádica" (texto do B) | **Respondida (Q10)** | **Erro do arquivo** no A (linha, campo, valor, motivo). No B vira esporádica. Exige ajustar D7, `design.md` §8 e P13 |
+| Q-A3 | Desempate (2) "prazo da tarefa": relativo (campo `prazo`) ou absoluto da ocorrência? | **Respondida (Q11)** | Prazo **absoluto** da ocorrência corrente (confirma D14) |
+| Q-A4 | IDs `BSxx/PSxx/DSxx/SSxx` no A | **Respondida (Q12)** | **Tarefa periódica comum** se `periodo > 0` (sem política de servidor); fora dos testes da defesa A. Exige ajustar D7 e P13 |
 | Q-A5 | A2.3 cita "requisito 1.4" mas é o 1.5 | Erro de redação | Implementar o 1.5 (D19) |
 | Q-A6 | `id` sempre numérico? (afeta ordem do eixo Y) | Aberta | `id` string; ordem natural (D4) |
 | Q-A7 | Cores repetidas: erro ou aviso? | Aberta | Aviso (D17) |
 | Q-A8 | "Executar 10 vezes" = 10 ativações concluídas? | Aberta | Libera 10 ocorrências e termina quando as 10 concluem (D6) |
 | Q-A9 | Escopo de `lista_eventos` (mutex, E/S) no A | Aberta | Guardar texto cru, sem simular (A3.3.5 diz que é do B) |
 | Q-A10 | Ordem dos eventos dentro de um tick | Aberta | Ordem fixa definida em `design.md` §6 |
+| Q-A11 | RG5: Q13 ("tudo tem que estar empacotado", resposta a "binário estático?") vale também para quem usa Qt, ou a pasta com `.exe` + DLLs (Q9) continua aceita? | Aberta (confirmação recomendada) | Pasta `dist/` (Q9, D26). Plano B sem mudar código: Qt compilado estaticamente → um único `.exe` |
 | Q-B1 | Mutex, inversão de prioridade, impasse (objetivos 2 e 3) sem requisito no B | Aberta | Ganchos no modelo; decidir no B |
 | Q-B2 | Todos os requisitos do A continuam valendo no B? | Aberta | Sim (B é incremental) |
 | Q-B3 | B1.1: "periódicas ou esporádicas" = "aperiódicas ou esporádicas"? | Aberta | Assumir aperiódicas/esporádicas |
