@@ -44,6 +44,12 @@ struct RunSummary {
     std::string message;    // motivo em português (fim, limite de ticks ou de memória) [A5]
 };
 
+// TEMPORÁRIO (Fase 1): REMOVER NA FASE 7 — a entrega não pode ter código morto.
+// Histórico do cenário G1 de docs/testes.md (instantes 0 a 12) montado à mão,
+// SEM o motor: a Fase 5 desenha o Gantt com ele antes de o motor existir, e
+// tests.cpp confere contra a grade de G1. Definido no fim de Simulator.cpp.
+std::vector<SystemSnapshot> demoHistoryG1();
+
 // ---------------------------------------------------------------------------
 // Simulator: a única classe do núcleo. Só guarda o histórico e o cursor;
 // todo o estado da simulação está nos snapshots (D16, D21).
