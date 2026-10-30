@@ -1,7 +1,10 @@
 #include "core/Parser.h"
+#include "core/Scheduler.h"   // registro de algoritmos [A4.2]
 
 #include <cctype>
 #include <charconv>
+#include <cstdint>
+#include <cstdio>
 #include <sstream>
 
 // Everything inside this unnamed namespace is private to this file.
@@ -143,8 +146,10 @@ bool parseInt(const std::string& text, Int& out) {
 // First line: algorithm;quantum;cpu_count
 // ---------------------------------------------------------------------------
 
-// Reads an integer system field. If it is missing or invalid, the default
-// value already stored in "target" is kept and a warning is added.
+// Reads an integer system field. If it is missing, the default value already
+// stored in "target" is kept and a warning is added [A3.2]. If it is present
+// but invalid, it is an ERROR (design.md §8): o usuário escreveu algo errado,
+// e trocar em silêncio por um padrão esconderia o engano.
 void readSystemInt(const std::vector<std::string>& fields, std::size_t index,
                    const std::string& name, int minValue, int maxValue,
                    int& target, int lineNumber, ParseResult& result) {
@@ -155,10 +160,21 @@ void readSystemInt(const std::vector<std::string>& fields, std::size_t index,
     if (raw.empty()) {
         addMessage(result, MsgCode::SystemMissingValue, {line, name, std::to_string(target)});
     } else if (!parseInt(raw, value) || value < minValue || value > maxValue) {
-        addMessage(result, MsgCode::SystemInvalidValue, {line, raw, name, std::to_string(target)});
+        addMessage(result, MsgCode::SystemInvalidValue,
+                   {line, raw, name, std::to_string(minValue), std::to_string(maxValue)});
     } else {
         target = value;
     }
+}
+
+// Lista "EDF, RM" com os nomes do registro, para a mensagem de erro.
+std::string joinNames(const std::vector<std::string>& names) {
+    std::string out;
+    for (const std::string& name : names) {
+        if (!out.empty()) out += ", ";
+        out += name;
+    }
+    return out;
 }
 
 void parseSystemLine(const std::vector<std::string>& fields, int lineNumber, ParseResult& result) {
@@ -171,8 +187,10 @@ void parseSystemLine(const std::vector<std::string>& fields, int lineNumber, Par
 
     if (algorithm.empty()) {
         addMessage(result, MsgCode::SystemMissingValue, {line, "algoritmo_escalonamento", config.algorithm});
-    } else if (VALID_ALGORITHMS.count(algorithm) == 0) {
-        addMessage(result, MsgCode::UnknownAlgorithm, {line, rawAlgorithm, config.algorithm});
+    } else if (findScheduler(algorithm) == nullptr) {
+        // Erro, não aviso: rodar RM quando o usuário pediu outro algoritmo
+        // (ex.: erro de digitação "EFD") daria um Gantt errado sem ele perceber.
+        addMessage(result, MsgCode::UnknownAlgorithm, {line, rawAlgorithm, joinNames(schedulerNames())});
     } else {
         config.algorithm = algorithm;
     }
@@ -204,43 +222,68 @@ bool isValidHexColor(const std::string& color) {
     return true;
 }
 
-// Returns a color that no task is using yet, so every task keeps a
-// different color in the Gantt chart [A2.1].
-std::string nextFreeColor(const std::map<std::string, int>& usedColors) {
+// Cor quase preta (os três canais abaixo de 0x40): confundiria com o preto
+// pontilhado que o Gantt usa para tarefa suspensa [A2.1] (D17). Olhar os três
+// canais, e não a luminância, mantém cores fortes como o azul 0000FF.
+// Recebe cor já validada (6 dígitos hexadecimais).
+bool isTooDark(const std::string& color) {
+    unsigned value = static_cast<unsigned>(std::stoul(color, nullptr, 16));
+    unsigned r = (value >> 16) & 0xFF, g = (value >> 8) & 0xFF, b = value & 0xFF;
+    return r < 0x40 && g < 0x40 && b < 0x40;
+}
+
+// k-ésima cor candidata: primeiro uma paleta fixa de cores bem distintas;
+// depois uma sequência que percorre as 2^24 cores sem repetir (multiplicar
+// por um número ímpar é uma permutação módulo 2^24).
+std::string candidateColor(std::size_t k) {
     static const std::vector<std::string> PALETTE = {
         "E6194B", "3CB44B", "FFE119", "4363D8", "F58231", "911EB4",
         "46F0F0", "F032E6", "BCF60C", "FABEBE", "008080", "E6BEFF",
     };
-    for (const std::string& color : PALETTE) {
-        if (usedColors.count(color) == 0) {
-            return color;
-        }
+    if (k < PALETTE.size()) {
+        return PALETTE[k];
     }
-    // Palette exhausted: walk through other colors until a free one is found.
-    for (int value = 0x101010; ; value += 0x0F0F37) {
-        char buffer[7];
-        std::snprintf(buffer, sizeof(buffer), "%06X", value & 0xFFFFFF);
-        if (usedColors.count(buffer) == 0) {
-            return buffer;
+    uint32_t value = (static_cast<uint32_t>(k - PALETTE.size()) * 0x9E3779B1u) & 0xFFFFFFu;
+    char buffer[7];
+    std::snprintf(buffer, sizeof(buffer), "%06X", static_cast<unsigned>(value));
+    return buffer;
+}
+
+// Returns a color that no task is using yet, so every task keeps a
+// different color in the Gantt chart [A2.1].
+// 'cursor' guarda até onde a sequência já foi percorrida neste arquivo: a
+// próxima busca continua dali, e 100 000 tarefas sem cor não ficam O(n²)
+// (a versão anterior recomeçava do início a cada tarefa e podia estourar o int).
+std::string nextFreeColor(const std::map<std::string, int>& usedColors, std::size_t& cursor) {
+    while (true) {
+        std::string color = candidateColor(cursor++);
+        if (usedColors.count(color) == 0 && !isTooDark(color)) {
+            return color;
         }
     }
 }
 
 // Reads an integer task field. Returns false (and adds an error) if it is
-// missing, not a number, or smaller than minValue.
+// missing, not a number, or outside [minValue, MAX_FIELD_VALUE].
+// 'optional': campo vazio não é erro (devolve true e deixa target como está).
 bool readTaskInt(const std::vector<std::string>& fields, std::size_t index,
                  const std::string& name, Tick minValue,
-                 Tick& target, int lineNumber, ParseResult& result) {
+                 Tick& target, int lineNumber, ParseResult& result,
+                 bool optional = false) {
     std::string line = std::to_string(lineNumber);
     std::string raw = fieldAt(fields, index);
     Tick value = 0;
 
     if (raw.empty()) {
+        if (optional) {
+            return true;
+        }
         addMessage(result, MsgCode::TaskMissingField, {line, name});
         return false;
     }
-    if (!parseInt(raw, value) || value < minValue) {
-        std::string reason = "deve ser um inteiro >= " + std::to_string(minValue);
+    if (!parseInt(raw, value) || value < minValue || value > MAX_FIELD_VALUE) {
+        std::string reason = "deve ser um número inteiro entre " + std::to_string(minValue) +
+                             " e " + std::to_string(MAX_FIELD_VALUE);
         addMessage(result, MsgCode::TaskInvalidValue, {line, name, raw, reason});
         return false;
     }
@@ -248,9 +291,36 @@ bool readTaskInt(const std::vector<std::string>& fields, std::size_t index,
     return true;
 }
 
+// Período: além das regras gerais, o valor negativo tem mensagem própria.
+// No Projeto A ele é ERRO do arquivo (A3.3; resposta do professor Q10); no
+// Projeto B passa a indicar tarefa esporádica (B1.3): trocar só aqui.
+bool readPeriod(const std::vector<std::string>& fields, Tick& target,
+                int lineNumber, ParseResult& result) {
+    std::string raw = fieldAt(fields, 4);
+    Tick value = 0;
+    if (parseInt(raw, value) && value < 0) {
+        addMessage(result, MsgCode::NegativePeriod, {std::to_string(lineNumber), raw});
+        return false;
+    }
+    return readTaskInt(fields, 4, "periodo", 0, target, lineNumber, result);
+}
+
+// lista_eventos = tudo depois do 6º ';' (D30). Os eventos só serão definidos
+// no Projeto B e podem conter ';', então os campos que sobraram são juntados
+// de volta em vez de descartados [A3.3.5].
+std::string eventsText(const std::vector<std::string>& fields) {
+    std::string out;
+    for (std::size_t i = 6; i < fields.size(); ++i) {
+        if (i > 6) out += ';';
+        out += fields[i];
+    }
+    return out;
+}
+
 // usedIds and usedColors map each id/color to the line where it first appeared.
 void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, ParseResult& result,
-                   std::map<std::string, int>& usedIds, std::map<std::string, int>& usedColors) {
+                   std::map<std::string, int>& usedIds, std::map<std::string, int>& usedColors,
+                   std::size_t& colorCursor) {
     std::string line = std::to_string(lineNumber);
     Task task;       // built locally, added only at the end
     bool ok = true;  // becomes false on any error, but we keep checking the
@@ -277,35 +347,69 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
     // Nomes dos campos como no formato do arquivo [A3.3], para o usuário achar o erro.
     ok = readTaskInt(fields, 2, "ingresso", 0, task.arrival,  lineNumber, result) && ok;
     ok = readTaskInt(fields, 3, "duracao",  1, task.duration, lineNumber, result) && ok;
-    ok = readTaskInt(fields, 4, "periodo",  0, task.period,   lineNumber, result) && ok;  // < 0 is an error [A3.3]
-    ok = readTaskInt(fields, 5, "prazo",    1, task.deadline, lineNumber, result) && ok;
+    ok = readPeriod(fields, task.period, lineNumber, result) && ok;  // < 0 is an error [A3.3]
+    // Prazo é opcional: vazio ou 0 => período (padrão, A3.2, D8). Negativo é erro.
+    ok = readTaskInt(fields, 5, "prazo", 0, task.deadline, lineNumber, result, true) && ok;
 
-    // Field 6: event list (optional, kept as raw text for Project B)
-    // task.rawEvents = fieldAt(fields, 6);
-
-    if (!ok) {
-        return;  // at least one error: task is not added
-    }
-    if (task.period == 0) {
-        addMessage(result, MsgCode::AperiodicIgnored, {line, task.id});  // [A4.4]
-        return;
-    }
-
-    // Field 1: color. Checked last, so only tasks that are really added
-    // reserve a color. Uppercase so "ff0000" and "FF0000" are the same [A3.3.2].
+    // Field 1: color. Uppercase so "ff0000" and "FF0000" are the same [A3.3.2].
+    // Vazia => paleta automática; fora do formato RRGGBB => erro (D17).
     std::string rawColor = fieldAt(fields, 1);
     std::string color = toUpper(rawColor);
     if (!color.empty() && color[0] == '#') {
         color.erase(0, 1);  // "#FF0000" é a forma comum de escrever cor: tolerada (D17)
     }
+    if (!color.empty() && !isValidHexColor(color)) {
+        addMessage(result, MsgCode::InvalidColor, {line, rawColor});
+        ok = false;
+    }
 
-    if (!isValidHexColor(color)) {
-        color = nextFreeColor(usedColors);
-        addMessage(result, MsgCode::InvalidColor, {line, rawColor, task.id, color});
+    if (!ok) {
+        return;  // at least one error: task is not added
+    }
+
+    // Field 6+: event list (optional, kept as raw text for Project B, D30)
+    task.rawEvents = eventsText(fields);
+    if (!task.rawEvents.empty()) {
+        addMessage(result, MsgCode::EventsStored, {line, task.id});
+    }
+
+    if (task.period == 0) {
+        // Aperiódica: carregada e marcada, mas não simulada no A (A4.4, D7). Fica
+        // no TCB para aparecer na tabela e para o Projeto B só desligar a flag.
+        task.kind = TaskKind::Aperiodic;
+        task.ignored = true;
+        task.ignoredReason = "aperiódica (período 0): só é simulada no Projeto B";
+        addMessage(result, MsgCode::AperiodicIgnored, {line, task.id});  // [A4.4]
+    } else {
+        // IDs BSxx/PSxx/DSxx/SSxx com período > 0 são periódicas comuns no A
+        // (resposta do professor Q12): nenhum tratamento especial aqui.
+        if (task.deadline == 0) {
+            task.deadline = task.period;
+            addMessage(result, MsgCode::DefaultDeadline, {line, task.id, std::to_string(task.period)});
+        } else if (task.deadline > task.period) {
+            addMessage(result, MsgCode::DeadlineAfterPeriod,
+                       {line, std::to_string(task.deadline), task.id, std::to_string(task.period)});
+        }
+        if (task.duration > task.period) {
+            addMessage(result, MsgCode::DurationAfterPeriod,
+                       {line, std::to_string(task.duration), task.id, std::to_string(task.period)});
+        }
+    }
+
+    // Cor final: cada tarefa precisa de uma cor diferente, e o preto é
+    // reservado para "suspensa" [A2.1]. Nesses casos a tarefa recebe a
+    // próxima cor livre e o usuário é avisado (ideia do Arthur, D17).
+    if (color.empty()) {
+        color = nextFreeColor(usedColors, colorCursor);
+        addMessage(result, MsgCode::AutoColor, {line, task.id, color});
     } else if (usedColors.count(color) > 0) {
         std::string firstLine = std::to_string(usedColors.at(color));
-        std::string newColor = nextFreeColor(usedColors);
+        std::string newColor = nextFreeColor(usedColors, colorCursor);
         addMessage(result, MsgCode::DuplicateColor, {line, color, task.id, firstLine, newColor});
+        color = newColor;
+    } else if (isTooDark(color)) {
+        std::string newColor = nextFreeColor(usedColors, colorCursor);
+        addMessage(result, MsgCode::DarkColor, {line, color, task.id, newColor});
         color = newColor;
     }
 
@@ -325,8 +429,10 @@ ParseResult parser::parseConfig(const std::string& text) {
     std::string line;
     int lineNumber = 0;
     bool systemLineRead = false;
+    int taskLines = 0;               // linhas de tarefa (com ou sem erro)
     std::map<std::string, int> usedIds;
     std::map<std::string, int> usedColors;
+    std::size_t colorCursor = 0;     // posição na sequência de cores automáticas
 
     while (std::getline(stream, line)) {
         ++lineNumber;  // counts every line, so messages match the file
@@ -343,13 +449,24 @@ ParseResult parser::parseConfig(const std::string& text) {
             parseSystemLine(fields, lineNumber, result);
             systemLineRead = true;
         } else {
-            parseTaskLine(fields, lineNumber, result, usedIds, usedColors);
+            parseTaskLine(fields, lineNumber, result, usedIds, usedColors, colorCursor);
+            ++taskLines;
         }
+    }
+
+    // Tarefas que de fato serão simuladas (as aperiódicas ficam de fora no A).
+    int simulated = 0;
+    for (const Task& task : result.config.tasks) {
+        if (!task.ignored) ++simulated;
     }
 
     if (!systemLineRead) {
         addMessage(result, MsgCode::EmptyFile);
-    } else if (result.config.tasks.empty()) {
+    } else if (taskLines == 0) {
+        addMessage(result, MsgCode::TooFewLines);       // [A3.3.1]
+    } else if (simulated == 0 && result.errors.empty()) {
+        // Com outros erros, eles já explicam o problema; aqui o arquivo está
+        // certo, mas não sobra nenhuma tarefa periódica para simular.
         addMessage(result, MsgCode::NoValidTasks);
     }
 

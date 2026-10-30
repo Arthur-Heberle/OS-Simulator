@@ -4,7 +4,6 @@
 #include <map>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <vector>
 
 #include "core/Task.h"
@@ -13,12 +12,13 @@
 // Constants
 // ---------------------------------------------------------------------------
 
-// Scheduling algorithms accepted in the first line of the file (uppercase).
-inline const std::unordered_set<std::string_view> VALID_ALGORITHMS = {"RM", "EDF"};
+// Os algoritmos aceitos vêm do registro de escalonadores (findScheduler /
+// schedulerNames, Scheduler.h): incluir um algoritmo não exige mexer no parser [A4.2].
 
 // Constants to the system config
-inline constexpr int MAX_CPUS = 64;
+inline constexpr int MAX_CPUS = 64;                  // D12 (justificativa no design.md)
 inline constexpr int MAX_QUANTUM = 1000000;
+inline constexpr Tick MAX_FIELD_VALUE = 1000000000;  // 10^9: limite dos números da tarefa (design.md §8)
 
 // ---------------------------------------------------------------------------
 // Messages
@@ -28,19 +28,28 @@ enum class Severity { Error, Warning };
 
 enum class MsgCode {
     // Errors: there is no sensible default, so the item cannot be used
+    // (o arquivo inteiro não é carregado; design.md §8, D18)
     EmptyFile,
+    TooFewLines,
     NoValidTasks,
+    UnknownAlgorithm,
+    SystemInvalidValue,
     TaskMissingField,
     TaskInvalidValue,
     TaskDuplicateId,
+    NegativePeriod,
+    InvalidColor,
 
     // Warnings: a default value is used or the item is ignored
     AperiodicIgnored,
     SystemMissingValue,
-    SystemInvalidValue,
-    UnknownAlgorithm,
-    InvalidColor,
+    AutoColor,
     DuplicateColor,
+    DarkColor,
+    DefaultDeadline,
+    DeadlineAfterPeriod,
+    DurationAfterPeriod,
+    EventsStored,
     ExtraFields,
 };
 
@@ -53,27 +62,43 @@ struct MessageInfo {
 inline const std::map<MsgCode, MessageInfo> MESSAGES = {
     {MsgCode::EmptyFile,
      {Severity::Error, "O arquivo de configuração está vazio."}},
+    {MsgCode::TooFewLines,
+     {Severity::Error, "O arquivo precisa ter ao menos 2 linhas: a 1ª com 'algoritmo;quantum;qtde_cpus' e, a partir da 2ª, uma tarefa por linha."}},
     {MsgCode::NoValidTasks,
-     {Severity::Error, "Nenhuma tarefa válida encontrada. É necessária ao menos uma tarefa periódica."}},
+     {Severity::Error, "Nenhuma tarefa periódica para simular: todas as tarefas do arquivo foram ignoradas."}},
+    {MsgCode::UnknownAlgorithm,
+     {Severity::Error, "Linha {}: algoritmo de escalonamento desconhecido '{}'. Algoritmos disponíveis: {}."}},
+    {MsgCode::SystemInvalidValue,
+     {Severity::Error, "Linha {}: valor inválido '{}' para '{}' (esperado um número inteiro entre {} e {})."}},
     {MsgCode::TaskMissingField,
      {Severity::Error, "Linha {}: a tarefa não pode ser adicionada. Motivo: o campo '{}' está ausente."}},
     {MsgCode::TaskInvalidValue,
      {Severity::Error, "Linha {}: a tarefa não pode ser adicionada. Motivo: o campo '{}' tem o valor inválido '{}' ({})."}},
     {MsgCode::TaskDuplicateId,
-     {Severity::Error, "Linha {}: a tarefa não pode ser adicionada. Motivo: o id '{}' já é usado na linha {}."}},
+     {Severity::Error, "Linha {}: a tarefa não pode ser adicionada. Motivo: o id '{}' já é usado na linha {} (maiúsculas e minúsculas contam como iguais)."}},
+    {MsgCode::NegativePeriod,
+     {Severity::Error, "Linha {}: a tarefa não pode ser adicionada. Motivo: o campo 'periodo' tem o valor '{}'; período negativo é erro no Projeto A (tarefas esporádicas só no Projeto B)."}},
+    {MsgCode::InvalidColor,
+     {Severity::Error, "Linha {}: a tarefa não pode ser adicionada. Motivo: a cor '{}' não está no formato RRGGBB hexadecimal (ex.: F0E0D0)."}},
 
     {MsgCode::AperiodicIgnored,
      {Severity::Warning, "Linha {}: a tarefa '{}' é aperiódica (período 0) e será ignorada no Projeto A."}},
     {MsgCode::SystemMissingValue,
      {Severity::Warning, "Linha {}: '{}' não informado. Usando o padrão '{}'."}},
-    {MsgCode::SystemInvalidValue,
-     {Severity::Warning, "Linha {}: valor inválido '{}' para '{}'. Usando o padrão '{}'."}},
-    {MsgCode::UnknownAlgorithm,
-     {Severity::Warning, "Linha {}: algoritmo de escalonamento desconhecido '{}'. Usando o padrão '{}'."}},
-    {MsgCode::InvalidColor,
-     {Severity::Warning, "Linha {}: cor inválida '{}' na tarefa '{}'. Usando '{}'."}},
+    {MsgCode::AutoColor,
+     {Severity::Warning, "Linha {}: a tarefa '{}' não tem cor. Usando '{}'."}},
     {MsgCode::DuplicateColor,
-     {Severity::Warning, "Linha {}: a cor '{}' da tarefa '{}' já é usada na linha {}. Usando '{}' no lugar."}},
+     {Severity::Warning, "Linha {}: a cor '{}' da tarefa '{}' já é usada na linha {}. Usando '{}' no lugar (cada tarefa precisa de uma cor diferente)."}},
+    {MsgCode::DarkColor,
+     {Severity::Warning, "Linha {}: a cor '{}' da tarefa '{}' é escura demais (o preto indica tarefa suspensa no gráfico). Usando '{}' no lugar."}},
+    {MsgCode::DefaultDeadline,
+     {Severity::Warning, "Linha {}: prazo da tarefa '{}' não informado (ou 0). Usando o período ({})."}},
+    {MsgCode::DeadlineAfterPeriod,
+     {Severity::Warning, "Linha {}: o prazo ({}) da tarefa '{}' é maior que o período ({})."}},
+    {MsgCode::DurationAfterPeriod,
+     {Severity::Warning, "Linha {}: a duração ({}) da tarefa '{}' é maior que o período ({}): as ocorrências vão se acumular e perder prazos."}},
+    {MsgCode::EventsStored,
+     {Severity::Warning, "Linha {}: a lista de eventos da tarefa '{}' foi guardada, mas só é simulada no Projeto B."}},
     {MsgCode::ExtraFields,
      {Severity::Warning, "Linha {}: campos a mais foram ignorados."}},
 };
