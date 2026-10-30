@@ -20,9 +20,10 @@ simulador/dist/
 *.lib
 *.dll
 
-# Imagens geradas pelo botão de teste do Qt (Fase 0) e exportações de teste.
-teste_qt.png
-teste_qt.svg
+# Imagens do Gantt exportadas pela janela ou pelo --exportar (gantt_<config>_<data>.png/.svg):
+# são geradas a cada execução e gravadas na pasta do arquivo de configuração.
+gantt_*.png
+gantt_*.svg
 
 # Preferências pessoais de cada integrante para o Claude Code (CLAUDE.md, "Como trabalhar").
 CLAUDE.local.md
