@@ -3,7 +3,7 @@
 
 Simulator::Simulator(const Config& config)
     : quantum(config.quantum),
-      scheduler(schedulerRegistry().at(config.algorithm)) {   // o parser já validou o nome
+      scheduler(findScheduler(config.algorithm)) {   // o parser já validou o nome
     SystemSnapshot first;
     first.tick = 0;
     first.tasks = config.tasks;

@@ -1,5 +1,7 @@
 #include "core/Scheduler.h"
 #include <algorithm>
+#include <cctype>
+#include <map>
 
 // Priority key of a task for one algorithm: the smaller, the higher the priority.
 // This is the ONLY thing that changes between algorithms. [A4.2]
@@ -19,8 +21,11 @@ static int compareTasks(const Task& a, const Task& b, KeyFn key) {
     bool bRunning = b.state == TaskState::Running;
     if (aRunning != bRunning) return aRunning ? -1 : 1;
 
-    // (2) Smaller deadline (relative: the file field, see CLAUDE.md pending item 5)
-    if (a.deadline != b.deadline) return a.deadline < b.deadline ? -1 : 1;
+    // (2) Menor prazo ABSOLUTO da ocorrência corrente (resposta do professor Q11, D14).
+    // Candidatas sempre têm ocorrência pendente, então jobs.front() existe.
+    Tick aDeadline = a.jobs.front().absDeadline;
+    Tick bDeadline = b.jobs.front().absDeadline;
+    if (aDeadline != bDeadline) return aDeadline < bDeadline ? -1 : 1;
 
     // (3) Smaller arrival
     if (a.arrival != b.arrival) return a.arrival < b.arrival ? -1 : 1;
@@ -33,11 +38,11 @@ static int compareTasks(const Task& a, const Task& b, KeyFn key) {
 
 // Candidates = ready or executing tasks (returns their indexes in s.tasks).
 // New, suspended, waiting and terminated tasks do not compete for a CPU.
+// Tarefas ignoradas no Projeto A (D7) também não (isCandidate, Task.h).
 static std::vector<int> candidates(const SystemSnapshot& s) {
     std::vector<int> result;
     for (int i = 0; i < static_cast<int>(s.tasks.size()); i++) {
-        TaskState state = s.tasks[i].state;
-        if (state == TaskState::Ready || state == TaskState::Running)
+        if (isCandidate(s.tasks[i]))
             result.push_back(i);
     }
     return result;
@@ -73,10 +78,54 @@ PriorityGroups scheduleEDF(const SystemSnapshot& s) {
     return orderAndGroup(s, edfKey);
 }
 
-const std::map<std::string, SchedulerFn>& schedulerRegistry() {
-    static const std::map<std::string, SchedulerFn> registry = {
+// ---------------------------------------------------------------------------
+// Registro [A4.2]
+// ---------------------------------------------------------------------------
+
+static std::string toUpperName(std::string name) {
+    for (char& c : name) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return name;
+}
+
+// Mapa nome -> função. É um static LOCAL: é criado na primeira chamada, já com
+// os algoritmos embutidos, o que evita o problema de ordem de inicialização de
+// variáveis globais entre arquivos. Para incluir um algoritmo embutido novo:
+// escrever a função-chave e acrescentar uma linha aqui.
+static std::map<std::string, SchedulerFn>& registry() {
+    static std::map<std::string, SchedulerFn> table = {
         {"RM",  scheduleRM},
         {"EDF", scheduleEDF},
     };
-    return registry;
+    return table;
+}
+
+void registerScheduler(const std::string& name, SchedulerFn fn) {
+    registry()[toUpperName(name)] = fn;
+}
+
+SchedulerFn findScheduler(const std::string& name) {
+    auto it = registry().find(toUpperName(name));
+    return it == registry().end() ? nullptr : it->second;
+}
+
+std::vector<std::string> schedulerNames() {
+    std::vector<std::string> names;
+    for (const auto& entry : registry()) names.push_back(entry.first);  // std::map já é ordenado
+    return names;
+}
+
+// splitmix64 (Steele, Lea e Flood, 2014): poucas linhas, espalha bem os bits
+// e dá o mesmo resultado em qualquer compilador (std::uniform_int_distribution
+// não dá). Cada parâmetro é misturado em sequência.
+uint64_t tieHash(uint64_t seed, Tick now, int taskIndex) {
+    auto mix = [](uint64_t x) {
+        x += 0x9E3779B97F4A7C15ULL;
+        x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ULL;
+        x = (x ^ (x >> 27)) * 0x94D049BB133111EBULL;
+        return x ^ (x >> 31);
+    };
+    uint64_t h = mix(seed);
+    h = mix(h ^ static_cast<uint64_t>(now));
+    h = mix(h ^ static_cast<uint64_t>(taskIndex));
+    return h;
 }
