@@ -994,6 +994,64 @@ static void testFifoExtensibility() {
     CHECK(noViolations(checkFinalState(h)));
 }
 
+// Gerador de números do fuzz: splitmix64 com estado próprio do teste (o
+// núcleo não usa nada parecido; lá o sorteio é o tieHash sem estado). Semente
+// fixa => o fuzz é reproduzível: uma falha sempre volta igual.
+static uint64_t fuzzNext(uint64_t& state) {
+    uint64_t z = (state += 0x9E3779B97F4A7C15ULL);
+    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31);
+}
+
+// Inteiro uniforme em [lo, hi].
+static int fuzzRange(uint64_t& state, int lo, int hi) {
+    return lo + static_cast<int>(fuzzNext(state) % static_cast<uint64_t>(hi - lo + 1));
+}
+
+// Fuzz (testes.md §5): 'systems' sistemas aleatórios com 1–12 tarefas,
+// período em [2,20], duração em [1,período], ingresso em [0,10], prazo em
+// [1, 2·período], 1–4 CPUs, RM ou EDF e semente aleatória. Cada um roda até
+// o fim, e as invariantes 1–8 são verificadas em TODOS os snapshots; a 9
+// (determinismo) a cada 50 sistemas, rodando de novo. Na primeira falha,
+// imprime a configuração que a reproduz e para.
+static void testFuzz(int systems) {
+    uint64_t state = 20261109;  // data da defesa do A: só uma semente fixa
+    int failures = 0;
+    long long snapshots = 0;
+    for (int n = 0; n < systems && failures == 0; ++n) {
+        const int taskCount = fuzzRange(state, 1, 12);
+        const int cpuCount = fuzzRange(state, 1, 4);
+        std::string text = std::string(fuzzRange(state, 0, 1) ? "EDF" : "RM") + ";2;" +
+                           std::to_string(cpuCount) + "\n";
+        for (int i = 0; i < taskCount; ++i) {
+            const int period = fuzzRange(state, 2, 20);
+            const int duration = fuzzRange(state, 1, period);
+            const int arrival = fuzzRange(state, 0, 10);
+            const int deadline = fuzzRange(state, 1, 2 * period);
+            text += "T" + std::to_string(i) + ";;" + std::to_string(arrival) + ";" +
+                    std::to_string(duration) + ";" + std::to_string(period) + ";" +
+                    std::to_string(deadline) + "\n";
+        }
+        const uint64_t seed = fuzzNext(state);
+
+        const std::vector<SystemSnapshot> h = runConfig(text, seed);
+        snapshots += static_cast<long long>(h.size());
+        std::vector<std::string> problems = checkInvariants(h);
+        for (const std::string& p : checkFinalState(h)) problems.push_back(p);
+        if (n % 50 == 0 && !sameHistory(h, runConfig(text, seed))) {
+            problems.push_back("invariante 9: duas execuções deram históricos diferentes");
+        }
+        if (!problems.empty()) {
+            ++failures;
+            std::cerr << "  fuzz: sistema " << n << " (semente " << seed << ") falhou:\n" << text;
+            for (std::size_t k = 0; k < problems.size() && k < 5; ++k) std::cerr << "    " << problems[k] << "\n";
+        }
+    }
+    CHECK_EQ(failures, 0);
+    std::cout << "  (fuzz: " << systems << " sistemas, " << snapshots << " snapshots verificados)\n";
+}
+
 // Executa todos os testes e imprime o placar "N checks, M falhas".
 int main(int argc, char* argv[]) {
     // 'sim_tests --grid': imprime as grades de G1, G2 (RM e EDF) e G3 e sai.
@@ -1026,6 +1084,7 @@ int main(int argc, char* argv[]) {
     testGoldenG3();
     testGoldenG4();
     testFifoExtensibility();
+    testFuzz(10000);
 
     std::cout << g_checks << " checks, " << g_fails << " falhas\n";
     return g_fails == 0 ? 0 : 1;
