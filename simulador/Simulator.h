@@ -52,7 +52,9 @@ bool stalled(const SystemSnapshot& s);
 void beginInstant       (SystemSnapshot& s);  // conclusões -> ativações -> perdas de prazo
 void scheduleAndDispatch(SystemSnapshot& s);  // escalonador -> chooseTasks -> dispatch
 
-// Etapas, na ordem em que makeNext as chama (ordem fixa: design.md §6, Q-A10).
+// Etapas, na ordem em que makeNext as chama.
+// PERGUNTA EM ABERTO Q-A10: qual a ordem dos eventos dentro de um tick?
+// Padrão adotado: a ordem fixa abaixo (design.md §6).
 void runOneTick        (SystemSnapshot& s);  // 1. executa [t, t+1) com as CPUs decididas em t
 void finishActivations (SystemSnapshot& s);  // 2. conclusões no instante t+1
 void releaseActivations(SystemSnapshot& s);  // 3. ativações
@@ -91,12 +93,6 @@ struct RunSummary {
     Tick ticks = 0;         // instante alcançado (current().tick ao parar)
     std::string message;    // motivo em português (fim, limite de ticks ou de memória) [A5]
 };
-
-// TEMPORÁRIO (Fase 1): REMOVER NA FASE 7 — a entrega não pode ter código morto.
-// Histórico do cenário G1 de docs/testes.md (instantes 0 a 12) montado à mão,
-// SEM o motor: a Fase 5 desenha o Gantt com ele antes de o motor existir, e
-// tests.cpp confere contra a grade de G1. Definido no fim de Simulator.cpp.
-std::vector<SystemSnapshot> demoHistoryG1();
 
 // ---------------------------------------------------------------------------
 // Simulator: a única classe do núcleo. Só guarda o histórico e o cursor;

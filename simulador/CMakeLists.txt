@@ -14,7 +14,9 @@
 #     4) Rodar os testes do núcleo (não usam Qt):
 #          build\sim_tests.exe
 #     5) Gerar a pasta standalone (sim_gui.exe + DLLs + plugins do Qt), que roda
-#        sem instalar nada (RG5, resposta do professor Q9):
+#        sem instalar nada (RG5, resposta do professor Q9).
+#        PERGUNTA EM ABERTO Q-A11: depois da Q13 ("tudo tem que estar empacotado")
+#        a pasta com .exe + DLLs ainda vale? Padrão adotado: sim, pasta dist/ (D26):
 #          cmake --install build --prefix dist
 #        e executar dist\sim_gui.exe. Sem janela (plano B da defesa):
 #          dist\sim_gui.exe --exportar exemplo_rm.txt <pasta>

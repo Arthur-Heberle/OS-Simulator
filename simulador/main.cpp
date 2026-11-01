@@ -60,6 +60,8 @@ static int exportWithoutWindow(const QString& configPath, const QString& dir) {
     return 0;
 }
 
+// Com "--exportar <arquivo> <pasta>" roda sem janela; senão abre a janela principal,
+// já com o arquivo carregado se ele vier como argumento.
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
     QApplication::setApplicationName(QStringLiteral("Simulador de SO"));

@@ -200,6 +200,8 @@ std::string joinNames(const std::vector<std::string>& names) {
     return out;
 }
 
+// Linha 1 do arquivo: algoritmo;quantum;qtde_cpus. Campo vazio ou ausente recebe o valor
+// padrão [A3.2]; valor inválido vira erro com linha, campo e valor [A3.3.6].
 void parseSystemLine(const std::vector<std::string>& fields, int lineNumber, ParseResult& result) {
     std::string line = std::to_string(lineNumber);
     Config& config = result.config;
@@ -435,6 +437,8 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
         color = nextFreeColor(usedColors, colorCursor);
         addMessage(result, MsgCode::AutoColor, {line, task.id, color});
     } else if (usedColors.count(color) > 0) {
+        // PERGUNTA EM ABERTO Q-A7: cor repetida no arquivo é erro ou aviso?
+        // Padrão adotado: aviso, e a tarefa recebe outra cor livre (D17).
         std::string firstLine = std::to_string(usedColors.at(color));
         std::string newColor = nextFreeColor(usedColors, colorCursor);
         addMessage(result, MsgCode::DuplicateColor, {line, color, task.id, firstLine, newColor});
@@ -510,6 +514,8 @@ static ParseResult parseText(const std::string& text) {
     return result;
 }
 
+// Ponto de entrada do parser: lê o texto inteiro e nunca deixa exceção chegar à
+// interface, porque um arquivo válido não pode falhar ao carregar [A3.3.7].
 ParseResult parser::parseConfig(const std::string& text) {
     // O parser nunca deixa uma exceção chegar à interface (design.md §8): o
     // código acima não lança nada em uso normal, mas falta de memória num
