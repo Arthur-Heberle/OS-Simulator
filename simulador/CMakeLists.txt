@@ -63,9 +63,9 @@ endif()
 option(BUILD_GUI "Compila a interface gráfica (exige Qt 6 com Widgets e Svg)" ON)
 
 # -----------------------------------------------------------------------------
-# Avisos do compilador: a regra do projeto é compilar SEM warnings com
-# -Wall -Wextra -Wpedantic (CLAUDE.md). A função é aplicada a cada alvo nosso
-# (e não globalmente) para não afetar código gerado por terceiros.
+# Avisos do compilador: o projeto compila sem warnings com -Wall -Wextra
+# -Wpedantic. A função é aplicada a cada alvo do projeto, e não globalmente,
+# para não afetar código gerado por terceiros.
 # -----------------------------------------------------------------------------
 function(sim_enable_warnings target)
     if(MSVC)
@@ -77,10 +77,9 @@ endfunction()
 
 # -----------------------------------------------------------------------------
 # simcore — núcleo da simulação (Model, Parser, Scheduler, Simulator).
-# Biblioteca estática: os testes e a interface usam exatamente o mesmo código.
-# Regra: NENHUM arquivo daqui inclui Qt (design.md §1, princípio 1).
-# A lista é explícita (sem file(GLOB)) para que adicionar/remover arquivo seja
-# uma decisão visível. Model.h é o contrato de dados (design.md §5).
+# Biblioteca estática: os testes e a interface usam o mesmo código. Nenhum
+# arquivo do núcleo inclui Qt (design.md §1). A lista é explícita, sem
+# file(GLOB), para que incluir ou remover um arquivo seja uma mudança visível.
 # -----------------------------------------------------------------------------
 add_library(simcore STATIC
     Parser.cpp
@@ -92,7 +91,7 @@ add_library(simcore STATIC
     Scheduler.h
     Simulator.h
 )
-# Includes planos ("Task.h"): a própria pasta é o diretório de include (D23).
+# Includes planos ("Model.h"): a própria pasta é o diretório de include (D23).
 target_include_directories(simcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 sim_enable_warnings(simcore)
 
@@ -115,9 +114,9 @@ endif()
 # -----------------------------------------------------------------------------
 if(BUILD_GUI)
     # Pasta do executável dentro de dist/: "." = raiz de dist/, para o usuário
-    # só precisar dar dois cliques em dist\sim_gui.exe. PRECISA vir antes do
-    # find_package(Qt6): o Qt grava esse valor no seu script de deploy nesse
-    # momento (se vier depois, as DLLs iriam para dist/bin e o .exe não as acharia).
+    # só precisar abrir dist\sim_gui.exe. Tem de vir antes do find_package(Qt6),
+    # que grava esse valor no script de deploy; depois disso as DLLs iriam para
+    # dist/bin e o .exe não as acharia.
     set(CMAKE_INSTALL_BINDIR ".")
     include(GNUInstallDirs)
 
@@ -142,7 +141,7 @@ if(BUILD_GUI AND Qt6_FOUND)
     sim_enable_warnings(sim_gui)
 
     set_target_properties(sim_gui PROPERTIES
-        AUTOMOC ON              # o moc do Qt roda sozinho nas classes com Q_OBJECT
+        AUTOMOC ON              # roda o moc se alguma classe usar Q_OBJECT (hoje nenhuma usa)
         WIN32_EXECUTABLE ON     # aplicativo de janela: sem console preto atrás
         MACOSX_BUNDLE ON
     )
@@ -189,7 +188,7 @@ if(BUILD_GUI AND Qt6_FOUND)
         endif()
     endif()
 elseif(BUILD_GUI)
-    # Não é erro: o núcleo e os testes continuam compilando (planejamento.md 0.5).
+    # Não é erro: o núcleo e os testes continuam compilando sem o Qt.
     message(WARNING
         "Qt 6 (>= 6.5, com Widgets e Svg) NÃO foi encontrado: compilando só simcore "
         "e sim_tests, sem a interface. Para a interface, informe o Qt com "

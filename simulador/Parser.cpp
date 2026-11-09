@@ -1,19 +1,17 @@
 // =============================================================================
-// Parser.cpp — Implementação do parser do arquivo de configuração (Parser.h).
+// Parser.cpp — Implementação do parser do arquivo de configuração.
 //
-// Fluxo de parseConfig:
-//   1. toUtf8 converte UTF-16 e ANSI; normalizeText tira o BOM e troca
+// Etapas de parseConfig:
+//   1. toUtf8 converte UTF-16 e ANSI; normalizeText remove o BOM e troca
 //      CRLF/CR por LF;
-//   2. lê linha a linha contando TODAS as linhas (as mensagens apontam a linha
-//      real do arquivo); linhas em branco são ignoradas [A3.3.6];
-//   3. a 1ª linha útil é a do sistema (parseSystemLine); as demais são tarefas
-//      (parseTaskLine), cada uma validada por inteiro para mostrar todos os
-//      erros de uma vez;
-//   4. regras do arquivo como um todo (mínimo de 2 linhas, alguma tarefa
-//      simulável).
-// serializeConfig escreve a Config de volta no mesmo formato.
+//   2. cada linha é numerada como no arquivo, para as mensagens apontarem a
+//      linha real; linhas em branco são ignoradas [A3.3.6];
+//   3. a primeira linha útil é a do sistema (parseSystemLine) e as demais são
+//      tarefas (parseTaskLine); cada linha é validada inteira, para o usuário
+//      ver todos os erros de uma vez;
+//   4. regras do arquivo inteiro (mínimo de 2 linhas, alguma tarefa simulável).
 //
-// Requisitos e decisões: ver o cabeçalho de Parser.h.
+// Requisitos e decisões: cabeçalho de Parser.h.
 // =============================================================================
 
 #include "Parser.h"
@@ -26,14 +24,14 @@
 #include <exception>
 #include <sstream>
 
-// Everything inside this unnamed namespace is private to this file.
+// Funções auxiliares, visíveis só neste arquivo.
 namespace {
 
 // ---------------------------------------------------------------------------
-// Messages
+// Mensagens
 // ---------------------------------------------------------------------------
 
-// Replaces each "{}" in the template with the next argument.
+// Troca cada "{}" do modelo pelo próximo argumento.
 std::string formatMessage(std::string_view tmpl, const std::vector<std::string>& args) {
     std::string out;
     std::size_t next = 0;
@@ -44,7 +42,7 @@ std::string formatMessage(std::string_view tmpl, const std::vector<std::string>&
         if (isPlaceholder && next < args.size()) {
             out += args[next];
             ++next;
-            ++i;  // skip the "}"
+            ++i;  // pula o "}"
         } else {
             out += tmpl[i];
         }
@@ -52,7 +50,7 @@ std::string formatMessage(std::string_view tmpl, const std::vector<std::string>&
     return out;
 }
 
-// Builds the message text and stores it as an error or a warning.
+// Monta o texto da mensagem e o guarda como erro ou aviso, conforme MESSAGES.
 void addMessage(ParseResult& result, MsgCode code, const std::vector<std::string>& args = {}) {
     const MessageInfo& info = MESSAGES.at(code);
     std::string text = formatMessage(info.text, args);
@@ -65,10 +63,10 @@ void addMessage(ParseResult& result, MsgCode code, const std::vector<std::string
 }
 
 // ---------------------------------------------------------------------------
-// Text helpers
+// Texto
 // ---------------------------------------------------------------------------
 
-// Removes spaces, tabs and line breaks from both ends.
+// Remove espaços, tabulações e quebras de linha das duas pontas [A3.3.6].
 std::string trim(const std::string& s) {
     const char* spaces = " \t\r\n";
 
@@ -80,7 +78,7 @@ std::string trim(const std::string& s) {
     return s.substr(first, last - first + 1);
 }
 
-// Returns a copy of the text in uppercase [A3.3.2].
+// Cópia do texto em maiúsculas, para comparar sem diferenciar caixa [A3.3.2].
 std::string toUpper(std::string s) {
     for (char& c : s) {
         c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
@@ -121,12 +119,12 @@ bool isValidUtf8(const std::string& text) {
     return true;
 }
 
-// Converte o arquivo para UTF-8, a codificação usada no resto do programa.
+// Converte o conteúdo para UTF-8, a codificação usada no resto do programa.
 // O Bloco de Notas grava "Unicode" como UTF-16 com BOM e "ANSI" como
 // Windows-1252; os dois são texto simples e precisam carregar [A3.3, A3.3.7].
 // 'encoding' recebe o nome da codificação convertida (vazio se já era UTF-8).
-// Bytes de 0x80 a 0xFF fora de UTF-8 são lidos como Latin-1, que coincide com
-// o Windows-1252 nas letras acentuadas.
+// Texto que não é UTF-8 válido é lido como Latin-1, igual ao Windows-1252 nas
+// letras acentuadas.
 std::string toUtf8(const std::string& raw, std::string& encoding) {
     encoding.clear();
     const bool littleEndian = raw.size() >= 2 && raw[0] == '\xFF' && raw[1] == '\xFE';
@@ -160,12 +158,10 @@ std::string toUtf8(const std::string& raw, std::string& encoding) {
     return out;
 }
 
-// Prepara o texto do arquivo para ser lido linha a linha (design.md §8, D18):
-// - remove o BOM UTF-8 do início (o Bloco de Notas do Windows pode gravá-lo;
-//   sem isso "EDF" viraria "\xEF\xBB\xBFEDF", um algoritmo desconhecido);
-// - troca CRLF (Windows) e CR isolado (Mac antigo) por LF, para std::getline
-//   separar as linhas certo em qualquer caso.
-// Arquivo que obedece ao formato nunca pode falhar ao carregar [A3.3.7].
+// Prepara o texto para a leitura linha a linha (D18): remove o BOM UTF-8, que
+// o Bloco de Notas pode gravar e que transformaria "EDF" em um algoritmo
+// desconhecido, e troca CRLF e CR isolado por LF, para std::getline separar
+// as linhas em qualquer caso [A3.3.7].
 std::string normalizeText(const std::string& text) {
     std::size_t start = 0;
     if (text.compare(0, 3, "\xEF\xBB\xBF") == 0) {
@@ -186,8 +182,9 @@ std::string normalizeText(const std::string& text) {
     return out;
 }
 
-// Splits a line by ';'. Empty fields are KEPT, because the position of a
-// field defines its meaning (";2;10" means: no algorithm, quantum 2, 10 CPUs).
+// Divide a linha por ';', já aparando cada campo. Campos vazios são mantidos,
+// porque a posição define o significado (";2;10" = algoritmo vazio, quantum 2,
+// 10 CPUs).
 std::vector<std::string> splitFields(const std::string& line) {
     std::vector<std::string> fields;
     std::string current;
@@ -202,15 +199,15 @@ std::vector<std::string> splitFields(const std::string& line) {
     }
     fields.push_back(trim(current));
 
-    // A ';' at the end of the line does not create a new field [A3.3.3].
+    // Um ';' no fim da linha não cria um campo a mais [A3.3.3].
     if (fields.size() > 1 && fields.back().empty()) {
         fields.pop_back();
     }
     return fields;
 }
 
-// Returns the field at the given position, or "" if the line is too short.
-// This way, a missing field and an empty field are handled the same way.
+// Campo da posição pedida, ou "" se a linha for mais curta: campo ausente e
+// campo vazio recebem o mesmo tratamento.
 std::string fieldAt(const std::vector<std::string>& fields, std::size_t index) {
     if (index < fields.size()) {
         return fields[index];
@@ -218,9 +215,9 @@ std::string fieldAt(const std::vector<std::string>& fields, std::size_t index) {
     return "";
 }
 
-// Converts text to int. Returns false if the WHOLE text is not an integer
-// (so "12abc" is rejected, unlike std::stoi). Never throws.
-// Template: serve para int (linha do sistema) e Tick (campos de tempo da tarefa).
+// Converte o texto inteiro em número; false se sobrar algum caractere ("12abc"
+// é recusado, ao contrário de std::stoi). Não lança exceção. Usado com int
+// (linha do sistema) e Tick (campos da tarefa).
 template <typename Int>
 bool parseInt(const std::string& text, Int& out) {
     if (text.empty()) {
@@ -228,8 +225,8 @@ bool parseInt(const std::string& text, Int& out) {
     }
     const char* begin = text.data();
     const char* end = text.data() + text.size();
-    // "+5" também é um inteiro válido (from_chars não aceita o '+'): na dúvida,
-    // aceitar [A3.3.7]. Só se vier um algarismo depois, para "+-5" continuar inválido.
+    // from_chars não aceita '+', mas "+5" é um inteiro válido [A3.3.7]. O
+    // algarismo depois do sinal mantém "+-5" inválido.
     if (*begin == '+' && text.size() > 1 && std::isdigit(static_cast<unsigned char>(begin[1]))) {
         ++begin;
     }
@@ -239,13 +236,12 @@ bool parseInt(const std::string& text, Int& out) {
 }
 
 // ---------------------------------------------------------------------------
-// First line: algorithm;quantum;cpu_count
+// Linha do sistema: algoritmo;quantum;qtde_cpus
 // ---------------------------------------------------------------------------
 
-// Reads an integer system field. If it is missing, the default value already
-// stored in "target" is kept and a warning is added [A3.2]. If it is present
-// but invalid, it is an ERROR (design.md §8): o usuário escreveu algo errado,
-// e trocar em silêncio por um padrão esconderia o engano.
+// Lê um campo inteiro da linha do sistema. Ausente: mantém o padrão já em
+// 'target' e avisa [A3.2]. Presente mas inválido: erro, porque trocar em
+// silêncio por um padrão esconderia o engano do usuário (design.md §8).
 void readSystemInt(const std::vector<std::string>& fields, std::size_t index,
                    const std::string& name, int minValue, int maxValue,
                    int& target, int lineNumber, ParseResult& result) {
@@ -263,7 +259,7 @@ void readSystemInt(const std::vector<std::string>& fields, std::size_t index,
     }
 }
 
-// Lista "EDF, RM" com os nomes do registro, para a mensagem de erro.
+// Nomes do registro separados por vírgula ("EDF, RM"), para a mensagem de erro.
 std::string joinNames(const std::vector<std::string>& names) {
     std::string out;
     for (const std::string& name : names) {
@@ -273,31 +269,31 @@ std::string joinNames(const std::vector<std::string>& names) {
     return out;
 }
 
-// Linha 1 do arquivo: algoritmo;quantum;qtde_cpus. Campo vazio ou ausente recebe o valor
-// padrão [A3.2]; valor inválido vira erro com linha, campo e valor [A3.3.6].
+// Linha do sistema. Campo vazio ou ausente recebe o padrão [A3.2]; valor
+// inválido vira erro com linha, campo e valor [A3.3.6].
 void parseSystemLine(const std::vector<std::string>& fields, int lineNumber, ParseResult& result) {
     std::string line = std::to_string(lineNumber);
     Config& config = result.config;
 
-    // Field 0: algorithm (compared in uppercase, so "rm" == "RM")
+    // Campo 0: algoritmo, comparado em maiúsculas ("rm" = "RM") [A3.3.2].
     std::string rawAlgorithm = fieldAt(fields, 0);
     std::string algorithm = toUpper(rawAlgorithm);
 
     if (algorithm.empty()) {
         addMessage(result, MsgCode::SystemMissingValue, {line, "algoritmo_escalonamento", config.algorithm});
     } else if (findScheduler(algorithm) == nullptr) {
-        // Erro, não aviso: rodar RM quando o usuário pediu outro algoritmo
-        // (ex.: erro de digitação "EFD") daria um Gantt errado sem ele perceber.
+        // Erro, não aviso: simular RM quando o usuário pediu outro algoritmo
+        // (ex.: "EFD") produziria um Gantt errado sem que ele percebesse.
         addMessage(result, MsgCode::UnknownAlgorithm, {line, rawAlgorithm, joinNames(schedulerNames())});
     } else {
         config.algorithm = algorithm;
     }
 
-    // Campo 1: quantum. 0 é aceito (sem fatia de tempo): RM e EDF não usam o
-    // quantum (Q4), e recusar 0 barraria um arquivo válido [A3.3.7].
+    // Campo 1: quantum. 0 é aceito (sem fatia de tempo): RM e EDF não o usam
+    // (Q4), e recusar 0 barraria um arquivo válido [A3.3.7] (D13).
     readSystemInt(fields, 1, "quantum", 0, MAX_QUANTUM, config.quantum, lineNumber, result);
 
-    // Field 2: number of CPUs (between 1 and MAX_CPUS) [RG2]
+    // Campo 2: número de CPUs, de 1 a MAX_CPUS [RG2] (D12).
     readSystemInt(fields, 2, "qtde_cpus", 1, MAX_CPUS, config.cpuCount, lineNumber, result);
 
     if (fields.size() > 3) {
@@ -306,9 +302,10 @@ void parseSystemLine(const std::vector<std::string>& fields, int lineNumber, Par
 }
 
 // ---------------------------------------------------------------------------
-// Other lines: id;color;arrival;duration;period;deadline;event_list
+// Linhas de tarefa: id;cor;ingresso;duracao;periodo;prazo;lista_eventos
 // ---------------------------------------------------------------------------
-// Checks if the text has exactly 6 hexadecimal digits (e.g. "F0E0D0").
+
+// true se o texto tem exatamente 6 dígitos hexadecimais (ex.: "F0E0D0").
 bool isValidHexColor(const std::string& color) {
     if (color.size() != 6) {
         return false;
@@ -321,28 +318,27 @@ bool isValidHexColor(const std::string& color) {
     return true;
 }
 
-// Cor quase preta (os três canais abaixo de 0x40): confundiria com o preto
-// pontilhado que o Gantt usa para tarefa suspensa [A2.1] (D17). Olhar os três
-// canais, e não a luminância, mantém cores fortes como o azul 0000FF.
-// Recebe cor já validada (6 dígitos hexadecimais).
+// Cor quase preta (os três canais abaixo de 0x40), que se confundiria com o
+// preto pontilhado da tarefa suspensa [A2.1] (D17). Testar os três canais, e
+// não a luminância, preserva cores fortes como o azul 0000FF. Recebe uma cor
+// já validada.
 bool isTooDark(const std::string& color) {
     unsigned value = static_cast<unsigned>(std::stoul(color, nullptr, 16));
     unsigned r = (value >> 16) & 0xFF, g = (value >> 8) & 0xFF, b = value & 0xFF;
     return r < 0x40 && g < 0x40 && b < 0x40;
 }
 
-// Cor quase branca (os três canais acima de 0xE0): sobre o fundo branco do
-// Gantt, uma barra assim pareceria "pronta" (ausência de cor, A2.1). A paleta
-// automática nunca a escolhe e, se vier do arquivo, é trocada com aviso (D17).
+// Cor quase branca (os três canais acima de 0xE0): no fundo branco do Gantt,
+// a barra pareceria "pronta" (ausência de cor, A2.1) (D17).
 bool isTooLight(const std::string& color) {
     unsigned value = static_cast<unsigned>(std::stoul(color, nullptr, 16));
     unsigned r = (value >> 16) & 0xFF, g = (value >> 8) & 0xFF, b = value & 0xFF;
     return r > 0xE0 && g > 0xE0 && b > 0xE0;
 }
 
-// k-ésima cor candidata: primeiro uma paleta fixa de cores bem distintas;
-// depois uma sequência que percorre as 2^24 cores sem repetir (multiplicar
-// por um número ímpar é uma permutação módulo 2^24).
+// k-ésima cor candidata da paleta automática: primeiro cores fixas bem
+// distintas; depois uma sequência que percorre as 2^24 cores sem repetir
+// (multiplicar por um número ímpar é uma permutação módulo 2^24).
 std::string candidateColor(std::size_t k) {
     static const std::vector<std::string> PALETTE = {
         "E6194B", "3CB44B", "FFE119", "4363D8", "F58231", "911EB4",
@@ -357,11 +353,10 @@ std::string candidateColor(std::size_t k) {
     return buffer;
 }
 
-// Returns a color that no task is using yet, so every task keeps a
-// different color in the Gantt chart [A2.1].
-// 'cursor' guarda até onde a sequência já foi percorrida neste arquivo: a
-// próxima busca continua dali, e 100 000 tarefas sem cor não ficam O(n²)
-// (a versão anterior recomeçava do início a cada tarefa e podia estourar o int).
+// Próxima cor da paleta que nenhuma tarefa usa e que não é quase preta nem
+// quase branca, para cada tarefa ter cor própria no Gantt [A2.1]. 'cursor'
+// guarda onde a busca parou, para a seguinte continuar dali: com 100 000
+// tarefas sem cor a busca total continua linear.
 std::string nextFreeColor(const std::map<std::string, int>& usedColors, std::size_t& cursor) {
     while (true) {
         std::string color = candidateColor(cursor++);
@@ -371,9 +366,9 @@ std::string nextFreeColor(const std::map<std::string, int>& usedColors, std::siz
     }
 }
 
-// Reads an integer task field. Returns false (and adds an error) if it is
-// missing, not a number, or outside [minValue, MAX_FIELD_VALUE].
-// 'optional': campo vazio não é erro (devolve true e deixa target como está).
+// Lê um campo inteiro da tarefa. Devolve false, com erro, se estiver ausente,
+// não for inteiro ou sair de [minValue, MAX_FIELD_VALUE]. Com 'optional', campo
+// vazio não é erro e 'target' fica como está.
 bool readTaskInt(const std::vector<std::string>& fields, std::size_t index,
                  const std::string& name, Tick minValue,
                  Tick& target, int lineNumber, ParseResult& result,
@@ -399,9 +394,8 @@ bool readTaskInt(const std::vector<std::string>& fields, std::size_t index,
     return true;
 }
 
-// Período: além das regras gerais, o valor negativo tem mensagem própria.
-// No Projeto A ele é ERRO do arquivo (A3.3; resposta do professor Q10); no
-// Projeto B passa a indicar tarefa esporádica (B1.3): trocar só aqui.
+// Lê o período. Valor negativo é erro do arquivo no Projeto A (A3.3, Q10), com
+// mensagem própria; no Projeto B indicará tarefa esporádica (B1.3).
 bool readPeriod(const std::vector<std::string>& fields, Tick& target,
                 int lineNumber, ParseResult& result) {
     std::string raw = fieldAt(fields, 4);
@@ -413,9 +407,9 @@ bool readPeriod(const std::vector<std::string>& fields, Tick& target,
     return readTaskInt(fields, 4, "periodo", 0, target, lineNumber, result);
 }
 
-// lista_eventos = tudo depois do 6º ';' (D30). Os eventos só serão definidos
-// no Projeto B e podem conter ';', então os campos que sobraram são juntados
-// de volta em vez de descartados [A3.3.5].
+// lista_eventos: tudo depois do 6º ';' (D30). O formato dos eventos só é
+// definido no Projeto B e pode conter ';', então os campos restantes são
+// juntados de volta [A3.3.5].
 std::string eventsText(const std::vector<std::string>& fields) {
     std::string out;
     for (std::size_t i = 6; i < fields.size(); ++i) {
@@ -425,19 +419,18 @@ std::string eventsText(const std::vector<std::string>& fields) {
     return out;
 }
 
-// usedIds and usedColors map each id/color to the line where it first appeared.
+// Lê uma linha de tarefa e, sem erros, a acrescenta à Config. usedIds e
+// usedColors guardam a linha onde cada id e cada cor apareceram primeiro.
 void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, ParseResult& result,
                    std::map<std::string, int>& usedIds, std::map<std::string, int>& usedColors,
                    std::size_t& colorCursor) {
     std::string line = std::to_string(lineNumber);
-    Task task;       // built locally, added only at the end
-    bool ok = true;  // becomes false on any error, but we keep checking the
-                     // other fields so the user sees all errors at once
+    Task task;       // só entra na Config se a linha não tiver erro
+    bool ok = true;  // a validação continua após um erro, para mostrar todos
 
-    // Field 0: id (required and unique)
-    // Unicidade sem diferenciar maiúsculas [A3.3.2] (D4): "a1" e "A1" são o
-    // mesmo id. O mapa usa a forma em maiúsculas; a tarefa guarda o id como
-    // foi digitado, para mostrar ao usuário.
+    // Campo 0: id, obrigatório e único sem diferenciar maiúsculas [A3.3.2]
+    // (D4). O mapa usa a forma em maiúsculas; a tarefa guarda o id como foi
+    // escrito.
     task.id = fieldAt(fields, 0);
     std::string idKey = toUpper(task.id);
     if (task.id.empty()) {
@@ -451,20 +444,19 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
         usedIds[idKey] = lineNumber;
     }
 
-    // Fields 2 to 5: integers
-    // Nomes dos campos como no formato do arquivo [A3.3], para o usuário achar o erro.
+    // Campos 2 a 5. As mensagens usam os nomes do formato do arquivo [A3.3].
     ok = readTaskInt(fields, 2, "ingresso", 0, task.arrival,  lineNumber, result) && ok;
     ok = readTaskInt(fields, 3, "duracao",  1, task.duration, lineNumber, result) && ok;
-    ok = readPeriod(fields, task.period, lineNumber, result) && ok;  // < 0 is an error [A3.3]
-    // Prazo é opcional: vazio ou 0 => período (padrão, A3.2, D8). Negativo é erro.
+    ok = readPeriod(fields, task.period, lineNumber, result) && ok;  // negativo é erro [A3.3]
+    // Prazo opcional: vazio ou 0 vale o período [A3.2] (D8); negativo é erro.
     ok = readTaskInt(fields, 5, "prazo", 0, task.deadline, lineNumber, result, true) && ok;
 
-    // Field 1: color. Uppercase so "ff0000" and "FF0000" are the same [A3.3.2].
-    // Vazia => paleta automática; fora do formato RRGGBB => erro (D17).
+    // Campo 1: cor, em maiúsculas ("ff0000" = "FF0000") [A3.3.2]. Vazia usa a
+    // paleta automática; fora de RRGGBB é erro (D17).
     std::string rawColor = fieldAt(fields, 1);
     std::string color = toUpper(rawColor);
     if (!color.empty() && color[0] == '#') {
-        color.erase(0, 1);  // "#FF0000" é a forma comum de escrever cor: tolerada (D17)
+        color.erase(0, 1);  // "#FF0000" é uma forma comum de escrever a cor (D17)
     }
     if (!color.empty() && !isValidHexColor(color)) {
         addMessage(result, MsgCode::InvalidColor, {line, rawColor});
@@ -472,25 +464,24 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
     }
 
     if (!ok) {
-        return;  // at least one error: task is not added
+        return;  // com erro, a tarefa não é adicionada
     }
 
-    // Field 6+: event list (optional, kept as raw text for Project B, D30)
+    // Campo 6 em diante: lista de eventos, opcional, guardada como texto (D30).
     task.rawEvents = eventsText(fields);
     if (!task.rawEvents.empty()) {
         addMessage(result, MsgCode::EventsStored, {line, task.id});
     }
 
     if (task.period == 0) {
-        // Aperiódica: carregada e marcada, mas não simulada no A (A4.4, D7). Fica
-        // no TCB para aparecer na tabela e para o Projeto B só desligar a flag.
+        // Aperiódica: carregada e marcada como ignorada, sem simular no A (A4.4,
+        // D7). Continua no TCB para aparecer na tabela.
         task.kind = TaskKind::Aperiodic;
         task.ignored = true;
         task.ignoredReason = "aperiódica (período 0): só é simulada no Projeto B";
         addMessage(result, MsgCode::AperiodicIgnored, {line, task.id});  // [A4.4]
     } else {
-        // IDs BSxx/PSxx/DSxx/SSxx com período > 0 são periódicas comuns no A
-        // (resposta do professor Q12): nenhum tratamento especial aqui.
+        // Ids BSxx/PSxx/DSxx/SSxx com período > 0 são periódicas comuns no A (Q12).
         if (task.deadline == 0) {
             task.deadline = task.period;
             addMessage(result, MsgCode::DefaultDeadline, {line, task.id, std::to_string(task.period)});
@@ -504,9 +495,9 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
         }
     }
 
-    // Cor final: cada tarefa precisa de uma cor diferente, e o preto é
-    // reservado para "suspensa" [A2.1]. Nesses casos a tarefa recebe a
-    // próxima cor livre e o usuário é avisado (ideia do Arthur, D17).
+    // Cada tarefa precisa de cor própria, e o preto indica "suspensa" [A2.1]:
+    // cor ausente, repetida, quase preta ou quase branca é trocada pela próxima
+    // cor livre, com aviso (D17).
     if (color.empty()) {
         color = nextFreeColor(usedColors, colorCursor);
         addMessage(result, MsgCode::AutoColor, {line, task.id, color});
@@ -534,10 +525,10 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// Public function
+// Funções públicas
 // ---------------------------------------------------------------------------
 
-// Leitura propriamente dita; parser::parseConfig (abaixo) só a protege.
+// Leitura do arquivo inteiro; parser::parseConfig só a protege de exceções.
 static ParseResult parseText(const std::string& text) {
     ParseResult result;
     std::string encoding;
@@ -552,16 +543,16 @@ static ParseResult parseText(const std::string& text) {
     std::size_t colorCursor = 0;     // posição na sequência de cores automáticas
 
     while (std::getline(stream, line)) {
-        ++lineNumber;  // counts every line, so messages match the file
+        ++lineNumber;  // conta todas as linhas: as mensagens apontam a linha do arquivo
 
         line = trim(line);
         if (line.empty()) {
-            continue;  // blank lines are not errors [A3.3.6]
+            continue;  // linha em branco não é erro [A3.3.6]
         }
 
         std::vector<std::string> fields = splitFields(line);
 
-        // The first non-empty line is the system line; the others are tasks.
+        // A primeira linha útil é a do sistema; as demais são tarefas.
         if (!systemLineRead) {
             parseSystemLine(fields, lineNumber, result);
             systemLineRead = true;
@@ -571,7 +562,7 @@ static ParseResult parseText(const std::string& text) {
         }
     }
 
-    // Tarefas que de fato serão simuladas (as aperiódicas ficam de fora no A).
+    // Tarefas simuladas (as aperiódicas ficam de fora no A).
     int simulated = 0;
     for (const Task& task : result.config.tasks) {
         if (!task.ignored) ++simulated;
@@ -590,13 +581,11 @@ static ParseResult parseText(const std::string& text) {
     return result;
 }
 
-// Ponto de entrada do parser: lê o texto inteiro e nunca deixa exceção chegar à
-// interface, porque um arquivo válido não pode falhar ao carregar [A3.3.7].
+// Ponto de entrada do parser.
 ParseResult parser::parseConfig(const std::string& text) {
-    // O parser nunca deixa uma exceção chegar à interface (design.md §8): o
-    // código acima não lança nada em uso normal, mas falta de memória num
-    // arquivo absurdo (ex.: gigabytes de texto) ainda poderia. Nesse caso o
-    // usuário recebe um erro claro, e nada é carregado [A3.3.6, A5].
+    // A leitura não lança exceção em uso normal, mas um arquivo de gigabytes
+    // pode esgotar a memória. Nesse caso o usuário recebe um erro claro e nada
+    // é carregado, sem a exceção chegar à interface [A3.3.6, A5].
     try {
         return parseText(text);
     } catch (const std::exception& e) {
@@ -611,14 +600,11 @@ ParseResult parser::parseConfig(const std::string& text) {
 }
 
 std::string parser::serializeConfig(const Config& config) {
-    // Mesmo formato que parseConfig lê [A3.3], uma linha por tarefa, sem ';'
-    // final. Números com std::to_string (não dependem de locale). Ida e volta
-    // (teste P14): parseConfig(serializeConfig(c)) devolve os mesmos campos de c,
-    // porque os padrões já aplicados (prazo = período, cor automática) são
-    // escritos por extenso.
-    // A semente do sorteio (Config::seed) NÃO é escrita: o formato do enunciado
-    // não tem esse campo, e um 4º campo na linha do sistema faria o arquivo
-    // fugir do formato. Ao recarregar, ela volta ao padrão.
+    // Formato do enunciado [A3.3], uma tarefa por linha. Os padrões já
+    // aplicados (prazo = período, cor automática) são escritos por extenso,
+    // então ler o texto de volta reproduz a Config (teste P14). A semente não é
+    // escrita: o formato não tem esse campo e ela volta ao padrão ao recarregar.
+    // std::to_string não depende de locale.
     std::string out = config.algorithm + ";" + std::to_string(config.quantum) + ";" +
                       std::to_string(config.cpuCount) + "\n";
     for (const Task& t : config.tasks) {
@@ -626,7 +612,7 @@ std::string parser::serializeConfig(const Config& config) {
                std::to_string(t.duration) + ";" + std::to_string(t.period) + ";" +
                std::to_string(t.deadline);
         if (!t.rawEvents.empty()) {
-            out += ";" + t.rawEvents;  // lista_eventos crua, com os ';' internos (D30)
+            out += ";" + t.rawEvents;  // lista_eventos como foi lida, com os ';' internos (D30)
         }
         out += "\n";
     }

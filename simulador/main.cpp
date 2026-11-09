@@ -1,17 +1,15 @@
 // =============================================================================
 // main.cpp — Ponto de entrada da interface gráfica (sim_gui).
 //
-// O quê:
-//   - sim_gui.exe                      abre a janela principal (Tela 1);
-//   - sim_gui.exe <arquivo>            abre a janela já com esse arquivo carregado
-//                                      (ex.: arrastar o .txt sobre o .exe);
-//   - sim_gui.exe --exportar <arquivo> <pasta>
-//                                      sem janela: carrega, executa até o fim e
-//                                      grava o Gantt em PNG + SVG na pasta.
+//   sim_gui.exe                       abre a janela principal (Tela 1);
+//   sim_gui.exe <arquivo>             abre a janela com o arquivo carregado
+//                                     (ex.: arrastar o .txt sobre o .exe);
+//   sim_gui.exe --exportar <arquivo> <pasta>
+//                                     sem janela: carrega, executa até o fim e
+//                                     grava o Gantt em PNG + SVG na pasta.
 //
-// Por quê o modo sem janela: é o plano B da defesa (gera as imagens mesmo se
-// algo der errado com a tela) e o teste automático da pasta standalone
-// (dist/ com PATH mínimo, RG5), que precisa carregar o Qt e o plugin de SVG.
+// O modo sem janela serve de plano B na defesa e de teste da pasta standalone
+// (dist/ com PATH mínimo, RG5), porque também carrega o Qt e o plugin de SVG.
 //
 // Requisitos: RG5, A2.4, A3.3.4, A3.3.6. Decisões: D26, D29.
 // =============================================================================
