@@ -590,8 +590,8 @@ EditResult applyEditTo(SystemSnapshot& s, const Edit& e) {
         break;
     }
     case EditKind::SetQuantum:
-        if (v < 1 || v > MAX_QUANTUM) {
-            return refuse("O quantum deve ser um inteiro entre 1 e " + std::to_string(MAX_QUANTUM) + ".");
+        if (v < 0 || v > MAX_QUANTUM) {
+            return refuse("O quantum deve ser um inteiro entre 0 e " + std::to_string(MAX_QUANTUM) + ".");
         }
         s.quantum = static_cast<int>(v);
         note = "quantum = " + std::to_string(v);
@@ -660,19 +660,28 @@ void Simulator::reset() {
     cursor_ = 0;
 }
 
-bool Simulator::jumpTo(Tick tick) {
-    if (tick < 0) return false;
+RunSummary Simulator::jumpTo(Tick tick, std::size_t maxBytes) {
+    if (tick < 0) {
+        RunSummary summary;
+        summary.finished = isFinished();
+        summary.ticks = current().tick;
+        summary.message = "O instante deve ser 0 ou maior.";
+        return summary;
+    }
     // Para trás (ou para um instante já calculado): só move o cursor, O(1).
     if (static_cast<std::size_t>(tick) < history_.size()) {
         cursor_ = static_cast<std::size_t>(tick);
-        return true;
+        return RunSummary{isFinished(), tick, ""};
     }
-    // Para a frente: calcula o que faltar, como vários "avançar".
+    // Para a frente: calcula o que faltar. Tarefa suspensa não impede, porque o
+    // usuário pediu um instante específico; só o fim e a memória param antes.
     cursor_ = history_.size() - 1;
-    while (current().tick < tick) {
-        if (!stepForward()) return false;  // terminou antes de chegar lá
+    RunSummary summary = advance(tick, maxBytes, false);
+    if (summary.message.empty() && current().tick < tick) {
+        summary.message = "A simulação termina no instante " + std::to_string(current().tick) +
+                          "; não existe o instante " + std::to_string(tick) + ".";
     }
-    return true;
+    return summary;
 }
 
 EditResult Simulator::applyEdit(const Edit& edit) {
@@ -726,15 +735,15 @@ std::size_t estimateSnapshotBytes(const SystemSnapshot& s) {
     return bytes;
 }
 
-RunSummary Simulator::runToEnd(Tick maxTicks, std::size_t maxBytes) {
+RunSummary Simulator::advance(Tick target, std::size_t maxBytes, bool stopWhenStalled) {
     RunSummary summary;
     // Tamanho estimado do histórico = nº de snapshots x tamanho do snapshot atual
     // (os snapshots de uma simulação têm tamanhos parecidos). Recalculado a cada
     // 64 passos para não custar mais que a própria simulação.
     std::size_t perSnapshot = estimateSnapshotBytes(current());
     std::size_t steps = 0;
-    while (!isFinished()) {
-        if (stalled(current())) {
+    while (!isFinished() && current().tick < target) {
+        if (stopWhenStalled && stalled(current())) {
             std::string ids;
             for (const Task& t : current().tasks) {
                 if (!t.ignored && t.state == TaskState::Suspended) ids += (ids.empty() ? "" : ", ") + t.id;
@@ -744,16 +753,11 @@ RunSummary Simulator::runToEnd(Tick maxTicks, std::size_t maxBytes) {
                               "Retome-as ou force o término delas.";
             break;
         }
-        if (current().tick >= maxTicks) {
+        if ((history_.size() + 1) * perSnapshot > maxBytes) {
             summary.message = "Simulação interrompida no instante " + std::to_string(current().tick) +
-                              ": limite de " + std::to_string(maxTicks) +
-                              " instantes atingido. Use 'avançar' para continuar daqui.";
-            break;
-        }
-        if (history_.size() * perSnapshot > maxBytes) {
-            summary.message = "Simulação interrompida no instante " + std::to_string(current().tick) +
-                              ": o histórico ocuparia mais de " + std::to_string(maxBytes >> 20) +
-                              " MB de memória. Reduza o número de tarefas ou os períodos.";
+                              ": o histórico de todos os instantes ocuparia mais de " +
+                              std::to_string(maxBytes >> 20) + " MB, o máximo de memória reservado para ele. "
+                              "Reduza o número de tarefas ou os períodos.";
             break;
         }
         stepForward();
@@ -761,8 +765,17 @@ RunSummary Simulator::runToEnd(Tick maxTicks, std::size_t maxBytes) {
     }
     summary.finished = isFinished();
     summary.ticks = current().tick;
+    return summary;
+}
+
+RunSummary Simulator::runToEnd(Tick maxTicks, std::size_t maxBytes) {
+    RunSummary summary = advance(maxTicks, maxBytes, true);
     if (summary.finished) {
         summary.message = "Simulação concluída no instante " + std::to_string(summary.ticks) + ".";
+    } else if (summary.message.empty()) {
+        summary.message = "Simulação interrompida no instante " + std::to_string(summary.ticks) +
+                          ": limite de " + std::to_string(maxTicks) +
+                          " instantes atingido. Use 'avançar' para continuar daqui.";
     }
     return summary;
 }

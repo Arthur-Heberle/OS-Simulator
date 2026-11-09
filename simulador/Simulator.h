@@ -16,6 +16,7 @@
 // =============================================================================
 #pragma once
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <vector>
 #include "Model.h"
@@ -74,13 +75,14 @@ void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vect
 // Regras de cada tipo: design.md §9.
 EditResult applyEditTo(SystemSnapshot& s, const Edit& edit);
 
-// Limite de instantes do "executar até o fim" (A1.5.3, design.md §9): impede que
-// uma configuração enorme trave a interface ou esgote a memória do histórico.
-constexpr Tick DEFAULT_MAX_TICKS = 2000000;
+// Sem limite de instantes: a simulação não pode ser limitada a um tempo máximo
+// [A2.4]. O único limite é a memória do histórico, abaixo.
+constexpr Tick NO_TICK_LIMIT = std::numeric_limits<Tick>::max();
 
-// Limite de memória estimada do histórico no "executar até o fim" (design.md
-// §9): ~1 GiB. Acima disso a máquina começaria a usar disco (ou faltaria
-// memória) e a interface pareceria travada; melhor parar e explicar.
+// Teto padrão da memória estimada do histórico (1 GiB). O histórico inteiro fica
+// em memória [A1.5.2]; passar da memória livre faria o programa fechar por falta
+// de memória. A interface troca este valor pela metade da memória livre do
+// computador (MainWindow::historyMemoryBudget).
 constexpr std::size_t DEFAULT_MAX_HISTORY_BYTES = std::size_t(1) << 30;
 
 // Estimativa (em bytes) do que um snapshot ocupa na memória: tamanho das
@@ -114,15 +116,16 @@ public:
     // Volta ao instante 0, descartando todo o histórico calculado depois dele
     // (as edições feitas no próprio instante 0 continuam valendo).
     void reset();
-    // Leva o cursor ao instante 'tick' (para trás só move o cursor; para a frente
-    // calcula o que faltar). false se 'tick' < 0 ou se a simulação termina antes
-    // (nesse caso o cursor fica no último instante). O relógio exibido acompanha
-    // o cursor [A1.5.2].
-    bool jumpTo(Tick tick);
-    // Modo "execução completa" [A1.5.3]: avança até o fim, ou para (com a
-    // mensagem do motivo) ao chegar ao instante 'maxTicks' ou quando o
-    // histórico estimado passar de 'maxBytes'. Nunca trava nem esgota a memória.
-    RunSummary runToEnd(Tick maxTicks = DEFAULT_MAX_TICKS,
+    // Leva o cursor ao instante 'tick' [A1.5.2]: para trás só move o cursor; para
+    // a frente calcula o que faltar, mesmo com tarefas suspensas. Se chegou, a
+    // mensagem fica vazia. Se a simulação termina antes, se 'tick' < 0 ou se o
+    // histórico passaria de 'maxBytes', o cursor fica no último instante
+    // possível e a mensagem explica o motivo [A5].
+    RunSummary jumpTo(Tick tick, std::size_t maxBytes = DEFAULT_MAX_HISTORY_BYTES);
+    // Execução completa [A1.5.3]: avança até o fim. Para antes, com a mensagem do
+    // motivo, no instante 'maxTicks', quando só restam tarefas suspensas
+    // (stalled) ou quando o histórico passaria de 'maxBytes'.
+    RunSummary runToEnd(Tick maxTicks = NO_TICK_LIMIT,
                         std::size_t maxBytes = DEFAULT_MAX_HISTORY_BYTES);
     // Edição manual no instante do cursor [A1.5.2, A3.4]: valida numa cópia; se
     // aceita, aplica antes do escalonador (D28), registra ManualEdit, descarta o
@@ -135,6 +138,11 @@ public:
     std::size_t cursor() const { return cursor_; }
 
 private:
+    // Avança até o instante 'target' ou até o fim. Para antes se o histórico
+    // passaria de 'maxBytes' ou, com 'stopWhenStalled', se nada mais muda sem
+    // edição. A mensagem fica vazia quando para por ter chegado ao alvo ou ao fim.
+    RunSummary advance(Tick target, std::size_t maxBytes, bool stopWhenStalled);
+
     std::vector<SystemSnapshot> history_;   // history_[k] = estado no instante k
     std::size_t cursor_ = 0;                // instante mostrado ao usuário (relógio global, A1.5.2)
     Config config_;                         // configuração carregada (base do instante 0)

@@ -56,7 +56,6 @@ enum class MsgCode {
     EmptyFile,
     InternalError,
     TooFewLines,
-    NoValidTasks,
     UnknownAlgorithm,
     SystemInvalidValue,
     TaskMissingField,
@@ -67,6 +66,8 @@ enum class MsgCode {
 
     // Warnings: a default value is used or the item is ignored
     AperiodicIgnored,
+    NoValidTasks,
+    ConvertedEncoding,
     SystemMissingValue,
     AutoColor,
     DuplicateColor,
@@ -92,8 +93,6 @@ inline const std::map<MsgCode, MessageInfo> MESSAGES = {
      {Severity::Error, "Não foi possível ler o arquivo (falha interna: {}). Nada foi carregado."}},
     {MsgCode::TooFewLines,
      {Severity::Error, "O arquivo precisa ter ao menos 2 linhas: a 1ª com 'algoritmo;quantum;qtde_cpus' e, a partir da 2ª, uma tarefa por linha."}},
-    {MsgCode::NoValidTasks,
-     {Severity::Error, "Nenhuma tarefa periódica para simular: todas as tarefas do arquivo foram ignoradas."}},
     {MsgCode::UnknownAlgorithm,
      {Severity::Error, "Linha {}: algoritmo de escalonamento desconhecido '{}'. Algoritmos disponíveis: {}."}},
     {MsgCode::SystemInvalidValue,
@@ -111,6 +110,10 @@ inline const std::map<MsgCode, MessageInfo> MESSAGES = {
 
     {MsgCode::AperiodicIgnored,
      {Severity::Warning, "Linha {}: a tarefa '{}' é aperiódica (período 0) e será ignorada no Projeto A."}},
+    {MsgCode::NoValidTasks,
+     {Severity::Warning, "Nenhuma tarefa periódica para simular: todas as tarefas do arquivo são aperiódicas e foram ignoradas. A simulação termina no instante 0."}},
+    {MsgCode::ConvertedEncoding,
+     {Severity::Warning, "O arquivo está em {} e foi convertido para UTF-8."}},
     {MsgCode::SystemMissingValue,
      {Severity::Warning, "Linha {}: '{}' não informado. Usando o padrão '{}'."}},
     {MsgCode::AutoColor,

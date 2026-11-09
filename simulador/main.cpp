@@ -54,7 +54,7 @@ static int exportWithoutWindow(const QString& configPath, const QString& dir) {
     for (const std::string& line : parsed.warnings) std::printf("%s\n", line.c_str());
     Simulator sim;
     if (!parsed.ok() || !sim.load(parsed.config)) return 1;
-    const RunSummary summary = sim.runToEnd();
+    const RunSummary summary = sim.runToEnd(NO_TICK_LIMIT, MainWindow::historyMemoryBudget());
     std::printf("%s\n", summary.message.c_str());
 
     QDir().mkpath(dir);
