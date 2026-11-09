@@ -23,6 +23,13 @@
 #include <cstdio>
 #include <string>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX  // impede que windows.h defina as macros min/max
+#endif
+#include <windows.h>  // SetConsoleOutputCP
+#endif
+
 #include "GanttRenderer.h"
 #include "MainWindow.h"
 #include "Parser.h"
@@ -31,10 +38,15 @@
 // --exportar <arquivo> <pasta>: imprime as mensagens em português e devolve
 // 0 se gravou as imagens, 1 se houve erro (arquivo, configuração ou gravação).
 static int exportWithoutWindow(const QString& configPath, const QString& dir) {
+#ifdef _WIN32
+    // O console do Windows usa outra página de código; sem isto os acentos das
+    // mensagens (UTF-8) e dos caminhos aparecem trocados.
+    SetConsoleOutputCP(CP_UTF8);
+#endif
     std::string text;
     QString error;
     if (!MainWindow::readConfigFile(configPath, text, &error)) {
-        std::printf("%s\n", error.toLocal8Bit().constData());
+        std::printf("%s\n", error.toUtf8().constData());
         return 1;
     }
     const ParseResult parsed = parser::parseConfig(text);
@@ -52,11 +64,11 @@ static int exportWithoutWindow(const QString& configPath, const QString& dir) {
     QStringList files;
     if (!GanttRenderer::exportPng(base + QStringLiteral(".png"), sim.history(), options, &error, &files) ||
         !GanttRenderer::exportSvg(base + QStringLiteral(".svg"), sim.history(), options, &error)) {
-        std::printf("%s\n", error.toLocal8Bit().constData());
+        std::printf("%s\n", error.toUtf8().constData());
         return 1;
     }
     files << base + QStringLiteral(".svg");
-    for (const QString& file : files) std::printf("Gravado: %s\n", QDir::toNativeSeparators(file).toLocal8Bit().constData());
+    for (const QString& file : files) std::printf("Gravado: %s\n", QDir::toNativeSeparators(file).toUtf8().constData());
     return 0;
 }
 

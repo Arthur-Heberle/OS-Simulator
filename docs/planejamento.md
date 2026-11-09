@@ -12,7 +12,7 @@ Cole no Claude Code, uma fase por vez:
 
 **Divisão entre os dois integrantes** (sugestão: quem criou o repositório fica com N): **N** = núcleo (Fases 2, 3, 4) e **G** = interface (Fase 5; Fase 0.5). Fases 0, 1, 6, 7, 8, 9 são conjuntas. Branches: uma por fase (`fase-N-tema`, ver `docs/fluxo-git.md`); cada um integra a própria branch na `main` (PR opcional, sem aprovação obrigatória) e avisa o outro para ler as mudanças; **ninguém altera `Model.h` sem avisar o outro** (é o contrato).
 
-## Estado em 29/10/2026 (depois de integrar a fase-0 e o trabalho do Arthur na `main`; atualizado no fim da Fase 6)
+## Estado (atualizado em 09/11/2026, fim da Fase 7)
 
 - **Fase 0:** concluída e integrada.
 - **Fase 1: integrada na `main`.** `Model.h` reúne `Task`, `Job`, `CPU`, `Occurrence`, `SystemSnapshot`, `Config`, `ParseResult` (com `ok()`), `Edit`/`EditKind`/`EditResult`, `MAX_CPUS` e as ajudas `currentJob`, `isCandidate`, `naturalIdLess` (por blocos); `Task.h`, `CPU.h`, `SystemSnapshot.h` e `Task.cpp` saíram. Declarados sem definição: `parser::serializeConfig` (Fase 2) e `Simulator::reset/jumpTo/runToEnd/applyEdit` + `RunSummary`/`DEFAULT_MAX_TICKS` (Fase 4). Em `tests.cpp`: `serializeSnapshot`, `checkInvariants` (invariantes 1, 2, 3, 4, 5, 7, 8), `taskOn`/`countOcc`/`occTicks`. Fixture `demoHistoryG1()` (instantes 0–12, montado à mão) em `Simulator.cpp`, marcado TEMPORÁRIO (remover na Fase 7). `sim_tests`: 71 checks.
@@ -21,7 +21,7 @@ Cole no Claude Code, uma fase por vez:
 - **Fase 4: integrada na `main`.** Navegação, `runToEnd` com limites, `applyEdit` para as 16 `EditKind`, G5, G6, fuzz de edições. Núcleo completo (Fases 1–4).
 - **Fase 5: integrada na `main`.** `GanttRenderer` (tela/PNG/SVG no estilo do Maziero) e `GanttWidget`.
 - **Fase 6: integrada na `main`.** `MainWindow.h/.cpp` (Tela 1), `Dialogs.h` (Telas 2–6), `main.cpp` definitivo (`--exportar`), `exemplo_rm.txt`, `exemplo_edf.txt`; núcleo: `stalled()` (runToEnd para quando só restam suspensas). `simulador/`: 17 arquivos (o 18º é o PDF das telas, Fase 8). `sim_tests`: 1299 checks.
-- **Fase 7: em andamento** (branch `fase-7-endurecimento`, 30/10/2026). Feito: `demoHistoryG1` removido (a cobertura passou para `testGoldenG1`), marcadores `PERGUNTA EM ABERTO` (Q-A6 a Q-A11), `testStepSpeed` (passo com 100 tarefas ≈ 0,02 ms) e `checklist-A.md` marcado com evidências. Falta: testes manuais (pendrive, outra partição, máquina sem Qt, zoom/rolagem com o mouse) e revisão de comentários e mensagens (RG6, A5). Decidido não fazer o escalonador em DLL (A4.2 "ideal").
+- **Fase 7: integrada na `main`** (09/11/2026). Arthur: `demoHistoryG1` removido (cobertura em `testGoldenG1`), marcadores `PERGUNTA EM ABERTO` (Q-A6 a Q-A11), `testStepSpeed`, comentários das funções e checklist. Fechamento: tabela de TCBs atualizada no lugar (passo da janela com 100 tarefas de ~33 ms para ~14 ms), erros de arquivo em português (antes vinham do sistema, em inglês), `--exportar` com saída em UTF-8, outra partição (D:) e zoom/rolagem verificados, `checklist-A.md` revisado. A auditoria achou 5 falhas (quantum 0 e arquivo só com aperiódicas recusados, UTF-16 ilegível, fim por edição sem exportação, "Ir para" sem limite de memória) e o limite de memória do histórico (A2.4, A3.3.1): corrigidos na branch `fix/` seguinte. Decidido não fazer o escalonador em DLL (A4.2 "ideal"). Fora do alcance do agente: pendrive, PC sem Qt, leitura humana dos comentários.
 
 ## 1. Calendário (hoje = 23/10/2026; defesa do A = 09/11/2026)
 
@@ -74,11 +74,11 @@ Congelamento interno: **06/11**. O prazo real do Moodle não consta nos arquivos
 7. Remover `Makefile`, `Project-A/`, `Project-B/` **somente depois** de o CMake compilar `simcore` e `sim_tests` com sucesso.
 
 **Critérios de aceitação**
-- [ ] `cmake -S simulador -B build && cmake --build build` compila o núcleo e roda `sim_tests` (trivial) sem warnings.
-- [ ] `.md` aparecem no `git status` (não são mais ignorados).
-- [ ] `dist/` roda fora da máquina de desenvolvimento sem instalar Qt (ou o relatório diz exatamente o que falta).
-- [ ] PNG e SVG de teste gerados corretamente.
-- [ ] `simulador/` plano; includes planos.
+- [x] `cmake -S simulador -B build && cmake --build build` compila o núcleo e roda `sim_tests` (trivial) sem warnings.
+- [x] `.md` aparecem no `git status` (não são mais ignorados).
+- [x] `dist/` roda fora da máquina de desenvolvimento sem instalar Qt (ou o relatório diz exatamente o que falta).
+- [x] PNG e SVG de teste gerados corretamente.
+- [x] `simulador/` plano; includes planos.
 
 **Commits:** `Corrige .gitignore e normaliza fins de linha`; `Achata estrutura em simulador/ e adiciona docs/`; `Adiciona CMake (simcore, sim_tests, sim_gui) e deploy`.
 **Pare e pergunte se:** o Qt não for encontrado; houver mais de uma versão do Qt; o standalone falhar por motivo que exija decisão (ex.: tentar build estático).

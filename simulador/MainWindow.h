@@ -111,6 +111,7 @@ private:
     QSpinBox* goTo_ = nullptr;
     QTimer* timer_ = nullptr;
     std::vector<int> tableTasks_;   // linha da tabela -> índice em tasks
+    std::vector<int> columnChars_;  // maior texto (em caracteres) já exibido em cada coluna da tabela
 
     QAction* openAct_ = nullptr;
     QAction* saveAct_ = nullptr;

@@ -1,5 +1,7 @@
 # Projeto A — Checklist de requisitos (recuperado do histórico do Git, commit 8ba93a4, e atualizado)
 
+> **Atualização (09/11/2026, fim da Fase 7):** a auditoria da Fase 7 achou falhas em A2.4, A3.3.1, A3.3.6, A3.3.7 e A4.4; os itens afetados voltaram para `[ ]` com a nota da falha e são corrigidos na branch `fix/` seguinte. Outra partição (D:) e zoom/rolagem verificados.
+>
 > **Atualização (30/10/2026):** itens marcados `[x]` na Fase 7, com a evidência da tabela abaixo; os `[ ]` têm a nota do que falta.
 >
 > **Atualização anterior (23/10/2026):** itens "Pendências" já respondidos pelo professor foram marcados; os demais apontam o **padrão adotado** e o ID em `docs/enunciado.md` §5. Regra de uso: `[x]` só com item **implementado e testado**. Códigos de teste (G1–G6, P1–P14) estão em `docs/testes.md`.
@@ -25,7 +27,9 @@
 | A3.3.x (formato, caixa, `;`, erros, falha grave) | P1–P14 e robustez (100 000 tarefas, BOM, CRLF, binário) |
 | A4, A4.1–A4.4 (RM, EDF, desempate, sorteio, 10 vezes, aperiódicas) | G1–G4b, teste FIFO (A4.2), P13, invariante 6 |
 | A5 (erros claros) | mensagens das Telas 2 a 6, verificadas na Fase 6 |
-| Desempenho | `testStepSpeed`: passo com 100 tarefas ≈ 0,02 ms (limite 16 ms) |
+| Desempenho | Núcleo: `testStepSpeed`, passo com 100 tarefas ≈ 0,05 ms. Janela (passo + redesenho, 100 tarefas): ≈ 14 ms, abaixo do limite de 16 ms, depois de a tabela de TCBs passar a ser atualizada no lugar (antes ≈ 33 ms) |
+| A3.3.4 (outra partição) | `sim_gui --exportar` com arquivo `minha config.cfg` em `D:\teste simulador ção (apagar)\`, saída gravada no próprio D: (Fase 7) |
+| Zoom e rolagem | Ctrl+roda e rolagem horizontal simuladas: pior caso 25 ms (64 CPUs, 200 tarefas) e 6 ms (93 000 instantes) |
 
 ---
 
@@ -129,11 +133,11 @@
 - [x] No passo a passo, o Gantt atualizado aparece na tela a cada passo.
 
 **A2.4 — Exportação da imagem**
-- [x] Ao final da simulação, gera um arquivo de imagem (JPG, PNG, SVG etc.).
+- [ ] Ao final da simulação, gera um arquivo de imagem (JPG, PNG, SVG etc.). *(falha: quando o fim vem de uma edição (forçar término/remover), não exporta nem abre a Tela 6)*
 - [x] A imagem corresponde à situação final, depois de todas as tarefas executarem.
 - [x] A imagem **não** é um print da janela.
 - [x] A imagem contém a simulação inteira.
-- [x] A imagem não está limitada a nenhum tempo máximo de simulação.
+- [ ] A imagem não está limitada a nenhum tempo máximo de simulação. *(falha: o histórico em memória para em ~1 GiB; com 100 tarefas isso dá ~26 000 instantes e a simulação não chega ao fim)*
 
 **A2.5 — Estilo e ordem**
 - [x] O Gantt é similar às figuras da seção 6.4 do livro do Prof. Maziero.
@@ -175,7 +179,7 @@
 **A3.3.1 — Estrutura do arquivo**
 - [x] A linha 1 tem os parâmetros gerais. Da linha 2 em diante, uma tarefa por linha.
 - [x] O arquivo tem no mínimo 2 linhas.
-- [x] Não há limite máximo de tarefas.
+- [ ] Não há limite máximo de tarefas. *(falha: o parser aceita 100 000 tarefas, mas com 1 000 tarefas o limite de memória do histórico para a simulação no instante ~1 850)*
 
 **A3.3.2 — Maiúsculas e minúsculas**
 - [x] Todas as strings são tratadas sem diferenciar maiúsculas e minúsculas (ex.: `PRIOP` = `priop` = `PrioP`).
@@ -186,19 +190,19 @@
 
 **A3.3.4 — Local do arquivo**
 - [x] Carrega arquivo com **qualquer nome**.
-- [ ] Carrega de **qualquer local**: qualquer diretório, outra partição ou disco externo (pendrive). *(pasta com espaço e acento ok; falta pendrive e outra partição)*
+- [ ] Carrega de **qualquer local**: qualquer diretório, outra partição ou disco externo (pendrive). *(pasta com espaço e acento e outra partição (D:) verificados; falta o pendrive, teste físico)*
 - [x] **Não** usa arquivo fixo.
 
 **A3.3.5 — Eventos (preparação para o B)**
 - [x] A estrutura suporta inúmeros eventos ao longo da execução de uma tarefa.
 
 **A3.3.6 — Erros no arquivo**
-- [x] Erros de carregamento são mostrados ao usuário com o motivo.
+- [ ] Erros de carregamento são mostrados ao usuário com o motivo. *(falha: arquivo UTF-16 (Bloco de Notas "Unicode") gera dezenas de erros ilegíveis)*
 - [x] Erros no conteúdo do arquivo são mostrados ao usuário com o motivo.
 - [x] Espaços e linhas em branco **não** são erros e são ignorados.
 
 **A3.3.7 — Falha grave**
-- [x] Nenhum arquivo válido, que obedeça ao formato, gera erro de carregamento (testado com uma bateria de arquivos).
+- [ ] Nenhum arquivo válido, que obedeça ao formato, gera erro de carregamento (testado com uma bateria de arquivos). *(falhas: `quantum` 0 é recusado; arquivo só com tarefas aperiódicas é recusado)*
 
 **A3.4 — Modificação de tarefas**
 - [x] O usuário modifica o estado atual de qualquer tarefa em qualquer passo/estágio.
@@ -227,13 +231,13 @@
 
 **A4.4 — Tipos de tarefa no Projeto A**
 - [x] A simulação suporta somente tarefas periódicas.
-- [x] Tarefas aperiódicas são ignoradas.
+- [ ] Tarefas aperiódicas são ignoradas. *(falha: se todas forem aperiódicas, o arquivo é recusado em vez de carregado com aviso)*
 - [x] A presença de tarefas aperiódicas é reportada claramente ao usuário.
 - [x] Cada tarefa periódica termina após executar 10 vezes.
 
 ### A5 — Interface
 - [ ] A interface é intuitiva e fácil de entender e usar. *(subjetivo: avaliar na defesa)*
-- [x] Qualquer erro durante o uso é apresentado claramente, com o motivo.
+- [ ] Qualquer erro durante o uso é apresentado claramente, com o motivo. *(falha: "Ir para o instante" muito à frente com tarefa suspensa esgota a memória e fecha o programa)*
 
 ---
 
