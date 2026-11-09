@@ -129,12 +129,12 @@ OS-Simulator/
 | D10 | Multiprocessador | **Escalonamento global**, fila única. A cada instante escolhem-se as M melhores (M = nº de CPUs). Quem já executa e foi escolhido **permanece na mesma CPU**; novos vão para CPU livre, preferindo a última usada | A1.2 (fila global, sem ociosidade); minimiza trocas de contexto e migrações |
 | D11 | CPU sem tarefa | Fica **desligada**; contam-se ticks desligados por CPU (painel + hachura cinza no Gantt). Custo de troca de contexto = 0 (documentado) | A1.2 |
 | D12 | Limite N de CPUs | `MAX_CPUS = 64` (uma constante) | Servidores comuns chegam a 64 núcleos por socket; acima disso o Gantt por CPU perde legibilidade; o histórico cresce com ticks × (tarefas + CPUs). Justificativa técnica exigida em Q6 |
-| D13 | Quantum | Lido, validado (inteiro ≥ 1), guardado, exibido; RM e EDF ignoram; `CPU.quantumUsed` é mantido para algoritmos futuros | Q4: específico de cada escalonador |
+| D13 | Quantum | Lido, validado (inteiro de 0 a 10⁶; 0 = sem fatia de tempo), guardado, exibido; RM e EDF ignoram; `CPU.quantumUsed` é mantido para algoritmos futuros | Q4: específico de cada escalonador. Aceitar 0 (revisto na Fase 7): RM e EDF não usam o campo, e recusar 0 barraria um arquivo válido (A3.3.7) |
 | D14 | Desempate (A4.3) | Ordem: (1) estava `Running` antes do escalonamento; (2) menor prazo **absoluto** da ocorrência corrente; (3) menor ingresso; (4) menor duração; (5) **sorteio determinístico** `tieHash(seed, tick, taskIndex)` (splitmix64), sem estado, feito pelo `Simulator` sobre os grupos de empate que o escalonador devolve (§7). Ícone de dado em `x=k` na tarefa escolhida. Só se emite o ícone quando o sorteio realmente decide algo (`|grupo empatado| > slotsLeft`). (2) confirmado pelo professor (Q11) | Sem estado ⇒ retroceder/avançar e re-simular após edição reproduzem o mesmo sorteio; evita guardar `mt19937` (~2,5 KB) em cada snapshot; `std::uniform_int_distribution` não é portável entre compiladores |
 | D15 | Edição no passado | Editar no passo `k` descarta `history[k+1..]` e segue da nova linha do tempo; ícone "edição manual" em `x=k` | Causalidade: o futuro antigo deixou de valer |
 | D16 | Histórico | 1 snapshot completo por tick, em memória; sem threads | A1.5.2; sem threads não há corrida e o determinismo é trivial |
 | D17 | Cores | Hex RGB de 6 dígitos (tolera `#`, caixa livre); fora disso é erro. Cor ausente ⇒ paleta automática. Cor repetida, escura demais (quase preta) ou clara demais (quase branca) ⇒ **aviso**, e a tarefa recebe a próxima cor livre da paleta (ideia do Arthur) | A2.1 exige uma cor diferente por tarefa, reserva o preto para "suspensa" e usa a ausência de cor para "pronta" (uma barra branca no fundo branco pareceria pronta): trocar a cor garante isso sem barrar um arquivo válido |
-| D18 | Erros de arquivo | **Fatal** (nada é carregado; mostra arquivo, linha, campo, valor, motivo) vs **aviso** (carrega e informa). Tolera espaços, linhas vazias, CRLF/LF, BOM UTF-8, `;` final opcional, campos opcionais ausentes | A3.3.3, A3.3.6, A3.3.7 |
+| D18 | Erros de arquivo | **Fatal** (nada é carregado; mostra arquivo, linha, campo, valor, motivo) vs **aviso** (carrega e informa). Tolera espaços, linhas vazias, CRLF/LF, BOM UTF-8, UTF-16 e ANSI do Bloco de Notas (convertidos, com aviso), `;` final opcional, campos opcionais ausentes | A3.3.3, A3.3.6, A3.3.7 |
 | D19 | Erro de redação do enunciado | A2.3 cita "requisito 1.4"; implementar o **1.5** | O conteúdo é sobre os modos de execução |
 | D20 | Código único A+B | Uma só árvore; entrega do A = tag `entrega-A`; B continua dali. Sem `Project-A/` e `Project-B/` | O B complementa o A; duas pastas geram divergência |
 | D21 | Estado e `Simulator` | `SystemSnapshot` carrega todo o estado; `Simulator` guarda `history` + `cursor` + validação (e, para a edição, a `Config` carregada e as edições feitas em cada instante, §9); ativação, despacho, perda de prazo, conclusão e edição são funções livres | Snapshot = cópia; retroceder = mexer no cursor; cada regra testável isolada |
@@ -334,13 +334,13 @@ uint64_t    tieHash(uint64_t seed, Tick now, int taskIndex);            // split
 
 `parser::parseConfig(const std::string& text)` e `parser::serializeConfig(const Config&)` (ida e volta), no `namespace parser`. Limites próprios do parser em `Parser.h`: `MAX_QUANTUM` (10⁶) e `MAX_FIELD_VALUE` (10⁹).
 
-**Pré-processamento:** remover BOM UTF-8; normalizar CRLF/CR → LF; separar linhas **guardando o número original**; descartar linhas vazias ou só com espaços; 1ª linha útil = sistema; demais = tarefas. Em cada linha: dividir por `;`, preservando campos vazios; remover `;` final; `trim` em cada campo; comparar textos sem diferenciar caixa.
+**Pré-processamento:** converter UTF-16 (BOM `FF FE`/`FE FF`) e texto que não é UTF-8 válido (lido como ANSI/Windows-1252) para UTF-8, com aviso; remover BOM UTF-8; normalizar CRLF/CR → LF; separar linhas **guardando o número original**; descartar linhas vazias ou só com espaços; 1ª linha útil = sistema; demais = tarefas. Em cada linha: dividir por `;`, preservando campos vazios; remover `;` final; `trim` em cada campo; comparar textos sem diferenciar caixa.
 
-**Linha do sistema:** `algoritmo;quantum;qtde_cpus`. Campos ausentes ⇒ padrão (aviso informativo). Algoritmo desconhecido ⇒ **erro** listando `schedulerNames()`. `quantum` inteiro ≥ 1. `qtde_cpus` em `1..MAX_CPUS`.
+**Linha do sistema:** `algoritmo;quantum;qtde_cpus`. Campos ausentes ⇒ padrão (aviso informativo). Algoritmo desconhecido ⇒ **erro** listando `schedulerNames()`. `quantum` inteiro em `0..10⁶` (D13). `qtde_cpus` em `1..MAX_CPUS`.
 
 **Linha de tarefa:** `id;cor;ingresso;duracao;periodo;prazo;lista_eventos` — `lista_eventos` = tudo depois do 6º `;` (D30). Obrigatórios: `id`, `ingresso`, `duracao`, `periodo`. Opcionais: `cor` (vazia ⇒ paleta automática: 12 cores fixas bem distintas e, depois, uma sequência que percorre as 2²⁴ cores sem repetir; nunca escolhe cor quase preta, quase branca ou já usada), `prazo` (vazio/0 ⇒ `periodo`), `lista_eventos`.
 
-**Erros fatais** (mensagem: linha, campo, valor, motivo, o que seria válido): menos de 2 linhas úteis; algoritmo desconhecido; `quantum`/`qtde_cpus` inválidos; `id` vazio ou duplicado (sem caixa); `cor` fora de `RRGGBB`; `ingresso < 0`; `duracao ≤ 0`; `periodo` não inteiro; **`periodo < 0` (Q10: erro no A; esporádica só no B)**; `prazo < 0`; número não inteiro ou > 10⁹; campos obrigatórios ausentes; nenhuma tarefa simulável (todas ignoradas ou nenhuma).
+**Erros fatais** (mensagem: linha, campo, valor, motivo, o que seria válido): menos de 2 linhas úteis; algoritmo desconhecido; `quantum`/`qtde_cpus` inválidos; `id` vazio ou duplicado (sem caixa); `cor` fora de `RRGGBB`; `ingresso < 0`; `duracao ≤ 0`; `periodo` não inteiro; **`periodo < 0` (Q10: erro no A; esporádica só no B)**; `prazo < 0`; número não inteiro ou > 10⁹; campos obrigatórios ausentes. Arquivo só com tarefas aperiódicas **carrega com aviso** (revisto na Fase 7: o arquivo obedece ao formato, A3.3.7, e o A4.4 manda ignorar e informar); a simulação termina no instante 0.
 
 **Avisos:** tarefa aperiódica ignorada (D7); cor repetida ou preta (a tarefa recebe outra cor, D17); `prazo > periodo`; `duracao > periodo`; `lista_eventos` não vazia (guardada); campos opcionais ausentes (padrão aplicado). IDs com prefixo de servidor **não** geram aviso nem tratamento especial no A (Q12).
 
@@ -360,11 +360,11 @@ public:
     void reset();
     bool stepForward();                             // cursor++ se já existe; senão calcula; false se terminou
     bool stepBack();                                // cursor-- (O(1)); false no instante 0
-    bool jumpTo(Tick tick);
-    RunSummary runToEnd(Tick maxTicks = DEFAULT_MAX_TICKS,
+    RunSummary jumpTo(Tick tick, std::size_t maxBytes = DEFAULT_MAX_HISTORY_BYTES); // mensagem vazia = chegou
+    RunSummary runToEnd(Tick maxTicks = NO_TICK_LIMIT,
                         std::size_t maxBytes = DEFAULT_MAX_HISTORY_BYTES);   // A1.5.3; para por limite, com mensagem
-    // RunSummary { bool finished; Tick ticks; std::string message; } — DEFAULT_MAX_TICKS = 2 000 000,
-    // DEFAULT_MAX_HISTORY_BYTES = 1 GiB (parâmetro para poder ser testado sem alocar 1 GiB)
+    // RunSummary { bool finished; Tick ticks; std::string message; }. Sem limite de instantes (A2.4);
+    // DEFAULT_MAX_HISTORY_BYTES = 1 GiB no núcleo; a interface passa a metade da memória livre.
     EditResult applyEdit(const Edit&);              // valida; se ok, trunca o futuro e recalcula (D15, D28)
     bool isFinished() const;                        // finished(current())
     const SystemSnapshot& current() const;          // history[cursor]
@@ -379,7 +379,7 @@ private:
 ```
 
 - O relógio exibido é sempre `current().tick` (retroceder/avançar altera o relógio global — A1.5.2).
-- **Memória:** ~10 tarefas × 1 000 ticks ≈ poucos MB; 100 × 10 000 pode passar de 200 MB. `runToEnd` estima o uso (`sizeof(Task)·n·ticks`) e para com mensagem clara acima de ~1 GiB ou `DEFAULT_MAX_TICKS = 2 000 000`. Otimização opcional na Fase 7: snapshots-chave a cada 64 ticks + re-simulação (possível por causa do determinismo).
+- **Memória:** ~10 tarefas × 1 000 ticks ≈ poucos MB; 100 × 10 000 pode passar de 200 MB. `runToEnd`, `jumpTo` e o "avançar" estimam o uso (`estimateSnapshotBytes` × nº de snapshots) e param com mensagem clara antes de passar do teto. **Não há limite de instantes** (A2.4; o antigo `DEFAULT_MAX_TICKS = 2 000 000` saiu na Fase 7). O teto de memória é a metade da memória física livre (`MainWindow::historyMemoryBudget`; 1 GiB no núcleo e nos testes): o A1.5.2 exige o histórico inteiro em memória, então a única restrição real é a memória da máquina, e parar antes evita que o programa feche por falta dela. Com 16 GB e 100 tarefas, isso dá centenas de milhares de instantes. Otimização não feita: snapshots-chave a cada 64 ticks + re-simulação.
 - **Mecânica da edição em `k`:** `s = history[k-1]` → `runOneTick` → `beginInstant` → **reaplicar `edits_[k]`** (edições já feitas neste instante, senão a 2ª apagaria a 1ª) → **validar e aplicar a nova** (registra `ManualEdit`) → `releaseActivations` + `checkDeadlines` de novo (a edição pode trazer uma ativação ou um prazo para agora; os dois são idempotentes) → `scheduleAndDispatch` → `history.resize(k)`; `push(s)`; `edits_[k] += edit`. Para `k == 0`: partir de `baseState(config_)`. A validação ocorre numa cópia; se recusada, **nada muda** (`history`, `cursor`, `edits_`) e `EditResult.message` explica o motivo. Toda edição de tarefa exige índice válido e tarefa simulada (aperiódica ignorada é recusada).
 
 | Edição | Regra de validação (mensagem de recusa explica o motivo) |
@@ -394,7 +394,7 @@ private:
 | `SetColor` | Mesmas regras do parser (`#` tolerado). **Recusa** se repetida, quase preta ou quase branca (no arquivo é aviso + troca automática; numa edição o usuário escolhe outra): A2.1 |
 | `SetAlgorithm` | Qualquer do registro; vale a partir do instante atual |
 | `SetCpuCount` | `1..MAX_CPUS`; ao reduzir, quem estava nas CPUs removidas volta a `Ready` com `Preemption` (nota "CPU removida"); CPU nova começa desligada com `ticksOff = tick` (invariante 7) |
-| `SetQuantum`/`SetSeed` | Quantum em `1..10⁶`; semente ≥ 0 |
+| `SetQuantum`/`SetSeed` | Quantum em `0..10⁶` (D13); semente ≥ 0 |
 | `AddTask` | Validada pelo **próprio parser** (arquivo montado com as tarefas atuais + a nova): ID único sem caixa, números, cor (automática se vazia), prazo padrão; `arrival ≥ tick`; entra no fim de `tasks` |
 | Estado `Running`/`Ready` direto | **Sempre recusado**: "o estado Executando é decidido pelo escalonador; suspenda a tarefa ou altere parâmetros" |
 
