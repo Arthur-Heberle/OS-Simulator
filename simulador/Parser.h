@@ -1,24 +1,20 @@
 // =============================================================================
-// Parser.h — Leitura do arquivo de configuração (texto -> Config) e o caminho
-// inverso (Config -> texto).
+// Parser.h — Leitura do arquivo de configuração (texto -> Config) e escrita
+// no mesmo formato (Config -> texto).
 //
-// O quê: parser::parseConfig lê o formato do enunciado [A3.3]
+// Formato [A3.3]:
 //     algoritmo_escalonamento;quantum;qtde_cpus
 //     id;cor;ingresso;duracao;periodo;prazo;lista_eventos
-// e devolve a Config com os padrões aplicados [A3.2] mais TODOS os erros e
-// avisos encontrados, cada um com linha, campo, valor e motivo [A3.3.6].
-// parser::serializeConfig faz o caminho inverso (salvar a configuração).
+// parseConfig devolve a Config com os padrões aplicados [A3.2] e todos os
+// erros e avisos encontrados, cada um com linha, campo, valor e motivo
+// [A3.3.6].
 //
-// Por quê assim:
-//   - Recebe o TEXTO, não o caminho (D29): quem abre o arquivo é a interface
-//     (QFile aceita qualquer caminho, pendrive e acentos, A3.3.4) e os testes
-//     passam strings, sem criar arquivos.
-//   - Erro x aviso (D18): erro = não há padrão possível, nada é carregado;
-//     aviso = usa um padrão ou ignora algo, e a simulação roda. Na dúvida,
-//     aceitar com aviso: arquivo válido nunca pode falhar [A3.3.7].
-//   - Severidade e texto de cada mensagem ficam numa tabela (MsgCode ->
-//     MESSAGES): mudar uma regra, se o professor responder diferente, é
-//     mexer numa linha.
+// O parser recebe o texto, não o caminho (D29): a interface abre o arquivo com
+// QFile, que aceita qualquer caminho [A3.3.4], e os testes passam strings.
+// Erro (nada é carregado) só quando não existe padrão possível; nos demais
+// casos o item recebe um padrão ou é ignorado, com aviso (D18), para que um
+// arquivo válido nunca falhe [A3.3.7]. Severidade e texto de cada mensagem
+// ficam na tabela MESSAGES.
 //
 // Requisitos: A3.2, A3.3, A3.3.1–A3.3.7, A4.1, A4.4, A5.
 // Decisões: D4, D7, D8, D12, D17, D18, D29, D30; respostas Q10 e Q12.
@@ -34,25 +30,24 @@
 #include "Model.h"
 
 // ---------------------------------------------------------------------------
-// Constants
+// Limites
 // ---------------------------------------------------------------------------
+// Os algoritmos aceitos vêm do registro de escalonadores (Scheduler.h), então
+// um algoritmo novo não exige mudança no parser [A4.2].
 
-// Os algoritmos aceitos vêm do registro de escalonadores (findScheduler /
-// schedulerNames, Scheduler.h): incluir um algoritmo não exige mexer no parser [A4.2].
-
-// Constants to the system config
 inline constexpr int MAX_QUANTUM = 1000000;
-inline constexpr Tick MAX_FIELD_VALUE = 1000000000;  // 10^9: limite dos números da tarefa (design.md §8)
+// Maior número aceito nos campos da tarefa (10^9): mantém os instantes
+// calculados (ingresso + 10 períodos) longe do limite de Tick (design.md §8).
+inline constexpr Tick MAX_FIELD_VALUE = 1000000000;
 
 // ---------------------------------------------------------------------------
-// Messages
+// Mensagens
 // ---------------------------------------------------------------------------
 
 enum class Severity { Error, Warning };
 
 enum class MsgCode {
-    // Errors: there is no sensible default, so the item cannot be used
-    // (o arquivo inteiro não é carregado; design.md §8, D18)
+    // Erros: não há padrão possível; o arquivo inteiro não é carregado (D18)
     EmptyFile,
     InternalError,
     TooFewLines,
@@ -64,7 +59,7 @@ enum class MsgCode {
     NegativePeriod,
     InvalidColor,
 
-    // Warnings: a default value is used or the item is ignored
+    // Avisos: o item recebe um valor padrão ou é ignorado, e o arquivo carrega
     AperiodicIgnored,
     NoValidTasks,
     ConvertedEncoding,
@@ -82,10 +77,10 @@ enum class MsgCode {
 
 struct MessageInfo {
     Severity severity;
-    std::string_view text;  // each "{}" is replaced by an argument, in order
+    std::string_view text;  // cada "{}" é trocado pelo próximo argumento
 };
 
-// Textos mostrados ao usuário: em português, sempre com o motivo [A3.3.6, A5].
+// Textos mostrados ao usuário, sempre com o motivo [A3.3.6, A5].
 inline const std::map<MsgCode, MessageInfo> MESSAGES = {
     {MsgCode::EmptyFile,
      {Severity::Error, "O arquivo de configuração está vazio."}},
@@ -137,33 +132,22 @@ inline const std::map<MsgCode, MessageInfo> MESSAGES = {
 };
 
 // ---------------------------------------------------------------------------
-// Result of the parser
+// Funções públicas (Config e ParseResult estão em Model.h)
 // ---------------------------------------------------------------------------
 
-// Config e ParseResult moram em Model.h (contrato de dados, design.md §5).
-
-// ---------------------------------------------------------------------------
-// Public function
-// ---------------------------------------------------------------------------
-
-// Reads the configuration text (not the file path) and returns the
-// configuration found, plus all errors and warnings.
-//
-// Text format:
-//   algorithm;quantum;cpu_count
-//   id;color;arrival;duration;period;deadline;event_list
 namespace parser {
+    // Lê o conteúdo do arquivo de configuração. Nunca lança exceção: falhas
+    // internas viram a mensagem InternalError.
     ParseResult parseConfig(const std::string& text);
 
-    // Gera o texto de um arquivo de configuração a partir de uma Config
-    // (ida e volta: parseConfig(serializeConfig(c)) reproduz c; teste P14).
-    // Usado por "Salvar configuração" na interface, depois de edições (A3.1).
-    // A semente do sorteio não faz parte do formato e não é escrita.
+    // Texto de um arquivo de configuração a partir de uma Config, usado em
+    // "Salvar configuração" [A3.1]. parseConfig(serializeConfig(c)) reproduz c
+    // (teste P14). A semente do sorteio não faz parte do formato.
     std::string serializeConfig(const Config& config);
 
-    // Regras de cor do parser (D17), expostas para a edição manual (SetColor)
-    // usar exatamente as mesmas. normalizeColor aceita "#ff0000" ou "FF0000",
-    // devolve "FF0000" em 'out' e false se não for RRGGBB hexadecimal.
+    // Regras de cor (D17), compartilhadas com a edição manual (SetColor).
+    // normalizeColor aceita "#ff0000" ou "FF0000", grava "FF0000" em 'out' e
+    // devolve false se o texto não for RRGGBB hexadecimal.
     bool normalizeColor(const std::string& raw, std::string& out);
     bool isTooDarkColor(const std::string& color);   // quase preta (preto = suspensa, A2.1)
     bool isTooLightColor(const std::string& color);  // quase branca (pareceria "pronta", A2.1)

@@ -1,6 +1,6 @@
 // =============================================================================
-// Simulator.cpp — Implementação do motor (design.md §6) e da classe Simulator.
-// Ver o cabeçalho de Simulator.h.
+// Simulator.cpp — Motor da simulação (design.md §6) e classe Simulator.
+// Contrato em Simulator.h.
 // =============================================================================
 #include "Simulator.h"
 #include "Parser.h"   // regras de validação do arquivo (AddTask, SetColor)
@@ -10,14 +10,13 @@
 
 // ---------------------------------------------------------------------------
 // Linha do tempo (D3): o tick t é o intervalo [t, t+1). history[k] é o estado
-// no instante k DEPOIS de processá-lo: as CPUs dele dizem quem executa em
-// [k, k+1) e as ocorrências dele aconteceram exatamente em x = k. Assim o
-// Gantt lê a coluna k direto de history[k], e um término em k+1 aparece em
-// history[k+1] sem que a informação de quem executou em [k, k+1) se perca.
+// depois de processar o instante k: suas CPUs dizem quem executa em [k, k+1)
+// e suas ocorrências aconteceram em x = k. O Gantt lê a coluna k direto de
+// history[k].
 // ---------------------------------------------------------------------------
 
-// Um instante é processado em duas metades (design.md §6). A edição manual
-// entra ENTRE elas (D28): o escalonador já enxerga o estado editado.
+// Um instante é processado em duas metades; a edição manual entra entre elas
+// (D28), para o escalonador já ver o estado editado.
 
 // 1ª metade: conclusões -> ativações -> perdas de prazo.
 void beginInstant(SystemSnapshot& s) {
@@ -28,11 +27,11 @@ void beginInstant(SystemSnapshot& s) {
 
 // 2ª metade: escalonamento -> despacho (e fila de prontos).
 void scheduleAndDispatch(SystemSnapshot& s) {
-    // Política: o algoritmo vem do snapshot (pode mudar durante a simulação, A3.1).
+    // O algoritmo vem do snapshot porque pode mudar durante a simulação [A3.1].
     SchedulerFn scheduler = findScheduler(s.algorithm);
     PriorityGroups groups = scheduler ? scheduler(s) : PriorityGroups{};
 
-    // Mecanismo: escolher quem executa e despachar.
+    // Escolhe quem executa e despacha.
     std::vector<int> drawn;
     std::vector<int> chosen = chooseTasks(s, groups, drawn);
     dispatch(s, chosen, drawn);
@@ -64,7 +63,7 @@ SystemSnapshot initState(const Config& config) {
 
 SystemSnapshot makeNext(const SystemSnapshot& prev) {
     SystemSnapshot next = prev;
-    next.occurrences.clear();          // a cópia trouxe as do tick anterior; começa vazio
+    next.occurrences.clear();          // a cópia trouxe os eventos do instante anterior
 
     runOneTick(next);                  // consome [prev.tick, prev.tick + 1)
     next.tick = prev.tick + 1;
@@ -76,10 +75,10 @@ SystemSnapshot makeNext(const SystemSnapshot& prev) {
 bool finished(const SystemSnapshot& s) {
     for (const Task& t : s.tasks) {
         if (!t.ignored && t.state != TaskState::Terminated) {
-            return false;   // achou uma que ainda não terminou: a simulação continua
+            return false;
         }
     }
-    return true;            // Every simulated task is terminated
+    return true;
 }
 
 bool stalled(const SystemSnapshot& s) {
@@ -88,7 +87,7 @@ bool stalled(const SystemSnapshot& s) {
         if (t.ignored || t.state == TaskState::Terminated) continue;
         if (t.state != TaskState::Suspended || t.released < PERIODIC_ACTIVATION_LIMIT) return false;
         for (const Job& job : t.jobs) {
-            if (!job.missed && job.absDeadline > s.tick) return false;  // ainda vai registrar perda de prazo
+            if (!job.missed && job.absDeadline > s.tick) return false;  // perda de prazo ainda por registrar
         }
         anySuspended = true;
     }
@@ -115,28 +114,26 @@ void runOneTick(SystemSnapshot& s) {
             cpu.quantumUsed++;
         }
     }
-    // Tempo de espera: quem estava pronto e não executou neste tick.
+    // Tempo de espera: tarefas prontas que não executaram neste tick.
     for (Task& task : s.tasks) {
         if (task.state == TaskState::Ready) task.waitTicks++;
     }
 }
 
-// Pequeno atalho para registrar uma ocorrência no instante atual (A2.2: o Gantt
-// desenha cada uma em x = s.tick).
+// Registra uma ocorrência no instante atual; o Gantt a desenha em x = s.tick [A2.2].
 static void addOccurrence(SystemSnapshot& s, OccurrenceType type, int taskIndex, int cpuIndex,
                           const std::string& note = "") {
     s.occurrences.push_back(Occurrence{type, taskIndex, cpuIndex, note});
 }
 
-// Passo 1 do instante (design.md §6): conclusões. Uma ocorrência cujo tempo
-// restante chegou a 0 terminou exatamente agora (no fim do tick anterior).
-// Vem ANTES das perdas de prazo: quem termina no próprio prazo não perde (D9).
+// Passo 1: conclusões. Ocorrência com tempo restante 0 terminou neste instante.
+// Vem antes das perdas de prazo: quem termina no próprio prazo não perde (D9).
 void finishActivations(SystemSnapshot& s) {
     for (int i = 0; i < static_cast<int>(s.tasks.size()); ++i) {
         Task& t = s.tasks[i];
         if (t.jobs.empty() || t.jobs.front().remaining > 0) continue;
 
-        // Termination = fim de UMA ocorrência (resposta Q5), com a CPU em que rodou.
+        // Termination marca o fim de uma ocorrência (Q5), com a CPU em que executou.
         addOccurrence(s, OccurrenceType::Termination, i, t.cpu);
         t.jobs.erase(t.jobs.begin());
         t.completed++;
@@ -147,21 +144,20 @@ void finishActivations(SystemSnapshot& s) {
         }
 
         if (!t.jobs.empty()) {
-            t.state = TaskState::Ready;     // havia ocorrência enfileirada (D5): volta a concorrer
+            t.state = TaskState::Ready;     // há ocorrência enfileirada (D5)
         } else if (t.released >= PERIODIC_ACTIVATION_LIMIT) {
             t.state = TaskState::Terminated;  // concluiu a 10ª ocorrência [A4.4] (D6)
             t.finishTime = s.tick;
             addOccurrence(s, OccurrenceType::TaskFinished, i, -1);
         } else {
-            t.state = TaskState::Dormant;   // espera a próxima ativação, sem concorrer (D1)
+            t.state = TaskState::Dormant;   // espera a próxima ativação sem disputar CPU (D1)
         }
     }
 }
 
-// Passo 2: ativações. Cada período cria uma ocorrência (Job) nova da tarefa
-// periódica, com prazo absoluto = ativação + prazo relativo [A3.3]. Se a
-// anterior ainda não terminou (perdeu o prazo), a nova é ENFILEIRADA, não
-// descartada (D5): a tarefa continua executando até cumprir tudo.
+// Passo 2: ativações. Cada período cria uma ocorrência com prazo absoluto =
+// ativação + prazo [A3.3]. Se a anterior ainda não terminou, a nova é
+// enfileirada (D5).
 void releaseActivations(SystemSnapshot& s) {
     for (int i = 0; i < static_cast<int>(s.tasks.size()); ++i) {
         Task& t = s.tasks[i];
@@ -172,26 +168,24 @@ void releaseActivations(SystemSnapshot& s) {
         t.jobs.push_back(Job{s.tick, s.tick + t.deadline, t.duration, t.duration, false});
         t.released++;
         t.nextRelease += t.period;
-        // Arrival = entrada na fila de prontos, a CADA ativação (resposta Q5) [A2.2].
+        // Arrival a cada ativação: a ocorrência entra na fila de prontos (Q5) [A2.2].
         addOccurrence(s, OccurrenceType::Arrival, i, -1, queued ? "enfileirada" : "");
 
-        // Ready/Running continuam (só ganham trabalho); Suspended continua impedida.
+        // Ready e Running só ganham trabalho; Suspended continua suspensa.
         if (t.state == TaskState::NotArrived || t.state == TaskState::Dormant) {
             t.state = TaskState::Ready;
         }
     }
 }
 
-// Passo 3: perdas de prazo. Chegou o prazo absoluto e ainda falta executar:
-// é um erro que o Gantt mostra [A3.3]. Registrado UMA vez por ocorrência
-// (D9), e a tarefa continua executando até terminar (A3.3).
+// Passo 3: perdas de prazo. Prazo absoluto atingido com execução pendente é
+// registrado uma vez por ocorrência (D9); a tarefa continua executando [A3.3].
 void checkDeadlines(SystemSnapshot& s) {
     for (int i = 0; i < static_cast<int>(s.tasks.size()); ++i) {
         Task& t = s.tasks[i];
         for (Job& job : t.jobs) {
-            // '<=' e não '==': numa execução normal dá no mesmo (o prazo é visto
-            // no instante exato), mas uma edição (SetDeadline) pode trazer o prazo
-            // para antes do instante atual, e a perda tem de ser registrada mesmo assim.
+            // '<=' em vez de '==': uma edição de prazo (SetDeadline) pode
+            // deixar o prazo absoluto antes do instante atual.
             if (job.absDeadline <= s.tick && job.remaining > 0 && !job.missed) {
                 job.missed = true;
                 t.deadlineMisses++;
@@ -211,13 +205,12 @@ std::vector<int> chooseTasks(const SystemSnapshot& s, const PriorityGroups& grou
         if (slotsLeft == 0) break;
 
         if (static_cast<int>(group.size()) <= slotsLeft) {
-            // O grupo inteiro cabe: todos executam, sem sorteio.
+            // O grupo cabe inteiro nas CPUs livres: sem sorteio.
             chosen.insert(chosen.end(), group.begin(), group.end());
             slotsLeft -= static_cast<int>(group.size());
         } else {
-            // Empate que não cabe nas CPUs livres: sorteio, critério (5) do A4.3.
-            // Ordena pelo hash sem estado (D14); o índice só desempata uma
-            // colisão de hash, para o resultado nunca depender da ordem do sort.
+            // Empate que não cabe nas CPUs livres: sorteio, critério (5) do A4.3,
+            // pelo hash sem estado (D14). O índice desempata colisões de hash.
             std::vector<int> order = group;
             std::sort(order.begin(), order.end(), [&s](int a, int b) {
                 uint64_t ha = tieHash(s.seed, s.tick, a);
@@ -234,16 +227,15 @@ std::vector<int> chooseTasks(const SystemSnapshot& s, const PriorityGroups& grou
     return chosen;
 }
 
-// Passos 5 e 6: despacho (design.md §6). 'chosen' são as tarefas que executam
-// em [tick, tick+1); 'drawn' as que foram escolhidas por sorteio [A4.3].
+// Passos 5 e 6: despacho. 'chosen' são as tarefas que executam em
+// [tick, tick+1); 'drawn', as escolhidas por sorteio [A4.3].
 void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vector<int>& drawn) {
     const int taskCount = static_cast<int>(s.tasks.size());
     const int cpuCount = static_cast<int>(s.cpus.size());
     std::vector<bool> isChosen(static_cast<std::size_t>(taskCount), false);
     for (int i : chosen) isChosen[static_cast<std::size_t>(i)] = true;
 
-    // (a) Preempção: estava executando e não foi escolhida (uma mais prioritária
-    // ocupou a vaga). Volta para a fila de prontos e libera a CPU.
+    // (a) Preempção: executava e não foi escolhida. Volta a Ready e libera a CPU.
     for (int i = 0; i < taskCount; ++i) {
         Task& t = s.tasks[i];
         if (t.state != TaskState::Running || isChosen[static_cast<std::size_t>(i)]) continue;
@@ -255,12 +247,10 @@ void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vect
         t.preemptions++;
     }
 
-    // (b) Escolhida que já executa fica na MESMA CPU (D10: sem troca de
-    // contexto nem migração). (c) Escolhida nova vai para uma CPU livre.
-    // Afinidade (D10) em duas passadas: primeiro quem pode voltar para a
-    // última CPU usada (se ela estiver livre); depois as demais, na CPU livre
-    // de menor índice. Assim uma tarefa sem afinidade não "rouba" a CPU de
-    // outra e provoca uma migração desnecessária.
+    // (b) Escolhida que já executa fica na mesma CPU (D10). (c) Escolhida nova
+    // vai para uma CPU livre, em duas passadas: primeiro as que podem voltar à
+    // última CPU usada; depois as demais, na CPU livre de menor índice. Assim
+    // uma tarefa sem afinidade não ocupa a CPU de outra e não força migração.
     auto start = [&](int i, int c) {
         Task& t = s.tasks[i];
         CPU& cpu = s.cpus[c];
@@ -274,12 +264,12 @@ void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vect
             addOccurrence(s, OccurrenceType::Migration, i, c);
             t.migrations++;
         }
-        // Ícone de sorteio no momento em que a escolhida (re)começa [A4.3].
+        // Ícone de sorteio quando a escolhida (re)começa [A4.3].
         if (std::find(drawn.begin(), drawn.end(), i) != drawn.end()) {
             addOccurrence(s, OccurrenceType::TieBreakDraw, i, c);
         }
     };
-    std::vector<int> waiting;  // escolhidas novas sem CPU de afinidade livre
+    std::vector<int> waiting;  // escolhidas sem a CPU de afinidade livre
     for (int i : chosen) {
         Task& t = s.tasks[i];
         if (t.state == TaskState::Running) continue;  // (b)
@@ -292,12 +282,12 @@ void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vect
     for (int i : waiting) {
         int c = 0;
         while (c < cpuCount && s.cpus[c].taskIndex != -1) ++c;
-        if (c == cpuCount) break;  // não acontece: chooseTasks escolhe no máximo M tarefas
+        if (c == cpuCount) break;  // defensivo: chooseTasks escolhe no máximo uma tarefa por CPU
         start(i, c);
     }
 
-    // (d) CPU sem tarefa é desligada; CPU desligada que recebeu tarefa é
-    // religada [A1.2]. Só as transições geram ocorrência (o Gantt mostra o período).
+    // (d) CPU sem tarefa é desligada; CPU desligada que recebe tarefa é religada
+    // [A1.2]. Só as transições geram ocorrência.
     for (int c = 0; c < cpuCount; ++c) {
         CPU& cpu = s.cpus[c];
         const bool busy = cpu.taskIndex != -1;
@@ -310,8 +300,8 @@ void dispatch(SystemSnapshot& s, const std::vector<int>& chosen, const std::vect
         }
     }
 
-    // Passo 6: fila global de prontos [A1.2], por ordem de chegada da
-    // ocorrência corrente (e índice, para desempatar sempre igual).
+    // Passo 6: fila global de prontos [A1.2], por ativação da ocorrência
+    // corrente e, em empate, por índice.
     s.readyQueue.clear();
     for (int i = 0; i < taskCount; ++i) {
         if (s.tasks[i].state == TaskState::Ready) s.readyQueue.push_back(i);
@@ -340,7 +330,7 @@ static std::string stateText(TaskState state) {
     return "";
 }
 
-// Tira a tarefa da CPU (sem ocorrência): usado por suspender e encerrar.
+// Tira a tarefa da CPU sem registrar ocorrência (suspender e encerrar).
 static void releaseCpu(SystemSnapshot& s, Task& t) {
     if (t.cpu >= 0) {
         s.cpus[t.cpu].taskIndex = -1;
@@ -349,12 +339,12 @@ static void releaseCpu(SystemSnapshot& s, Task& t) {
     }
 }
 
-// Valida a tarefa nova com as MESMAS regras do arquivo [A3.3] (D18): monta um
-// arquivo com as tarefas atuais + a nova, lê com parseConfig e olha só as
-// mensagens da última linha. Assim id duplicado (sem caixa), números, cor,
-// prazo padrão e paleta automática seguem exatamente o parser.
+// Valida a tarefa nova com as regras do arquivo [A3.3] (D18): monta um texto
+// com as tarefas atuais mais a nova, lê com parseConfig e considera só as
+// mensagens da última linha. Id duplicado, números, cor e prazo padrão seguem
+// assim exatamente o parser.
 static EditResult checkNewTask(const SystemSnapshot& s, const Task& candidate, Task& out) {
-    // ';' e quebra de linha mudariam a divisão em campos/linhas do arquivo montado.
+    // ';' ou quebra de linha mudariam a divisão do texto montado em campos e linhas.
     if (candidate.id.find_first_of(";\r\n") != std::string::npos ||
         candidate.color.find_first_of(";\r\n") != std::string::npos) {
         return {false, "O id e a cor não podem conter ';' nem quebra de linha."};
@@ -385,7 +375,7 @@ static EditResult checkNewTask(const SystemSnapshot& s, const Task& candidate, T
     const std::string errors = fromNewLine(parsed.errors);
     if (!errors.empty()) return {false, errors};
 
-    out = parsed.config.tasks.back();  // campos já normalizados (cor, prazo padrão, aperiódica)
+    out = parsed.config.tasks.back();  // campos já normalizados pelo parser
     return {true, fromNewLine(parsed.warnings)};
 }
 
@@ -393,11 +383,11 @@ EditResult applyEditTo(SystemSnapshot& s, const Edit& e) {
     auto refuse = [](const std::string& why) { return EditResult{false, why}; };
     const Tick now = s.tick;
     const long long v = e.value;
-    std::string note;     // texto da ocorrência ManualEdit (log/tooltip)
+    std::string note;     // texto da ocorrência ManualEdit
     std::string warning;  // aviso devolvido junto com ok = true
     int target = e.taskIndex;
 
-    // Edições de UMA tarefa: precisa existir e ser simulada no Projeto A.
+    // Edição de tarefa: a tarefa precisa existir e ser simulada no Projeto A.
     const bool onTask = e.kind != EditKind::SetAlgorithm && e.kind != EditKind::SetCpuCount &&
                         e.kind != EditKind::SetQuantum && e.kind != EditKind::SetSeed &&
                         e.kind != EditKind::AddTask;
@@ -412,7 +402,7 @@ EditResult applyEditTo(SystemSnapshot& s, const Edit& e) {
         }
     }
     const std::string name = t ? "A tarefa '" + t->id + "'" : "";
-    // Faixa válida dos parâmetros de tempo: a mesma do arquivo (design.md §8).
+    // Faixa dos parâmetros de tempo: a mesma do arquivo (design.md §8).
     auto checkRange = [&](const std::string& field, long long low) -> std::string {
         if (v < low || v > MAX_FIELD_VALUE) {
             return "O valor de '" + field + "' deve ser um inteiro entre " + std::to_string(low) +
@@ -475,7 +465,7 @@ EditResult applyEditTo(SystemSnapshot& s, const Edit& e) {
         if (t->released >= PERIODIC_ACTIVATION_LIMIT) {
             return refuse(name + " já foi ativada " + std::to_string(PERIODIC_ACTIVATION_LIMIT) + " vezes (limite do Projeto A).");
         }
-        // A ativação manual antecipa a próxima: o período passa a contar daqui.
+        // A ativação manual antecipa a próxima; o período passa a contar daqui.
         t->jobs.push_back(Job{now, now + t->deadline, t->duration, t->duration, false});
         t->released++;
         t->nextRelease = now + t->period;
@@ -500,7 +490,7 @@ EditResult applyEditTo(SystemSnapshot& s, const Edit& e) {
     case EditKind::SetDuration: {
         std::string bad = checkRange("duracao", 1);
         if (!bad.empty()) return refuse(bad);
-        t->duration = v;  // vale para as próximas ocorrências; a corrente segue como está
+        t->duration = v;  // vale a partir da próxima ocorrência
         note = "duração de '" + t->id + "' = " + std::to_string(v) + " (próximas ocorrências)";
         break;
     }
@@ -508,7 +498,7 @@ EditResult applyEditTo(SystemSnapshot& s, const Edit& e) {
         std::string bad = checkRange("periodo", 1);
         if (!bad.empty()) return refuse(bad);
         if (t->released > 0) {
-            // A próxima ativação passa a ser a última + o novo período (nunca no passado).
+            // Próxima ativação = última + novo período, nunca no passado.
             const Tick lastRelease = t->nextRelease - t->period;
             t->nextRelease = std::max(lastRelease + v, now);
         }
@@ -520,7 +510,7 @@ EditResult applyEditTo(SystemSnapshot& s, const Edit& e) {
         std::string bad = checkRange("prazo", 1);
         if (!bad.empty()) return refuse(bad);
         t->deadline = v;
-        // Ocorrências pendentes ainda sem perda de prazo ganham o novo prazo absoluto.
+        // Ocorrências pendentes ainda sem perda recebem o novo prazo absoluto.
         for (Job& job : t->jobs) {
             if (!job.missed) job.absDeadline = job.release + v;
         }
@@ -565,7 +555,7 @@ EditResult applyEditTo(SystemSnapshot& s, const Edit& e) {
                           " (recebido: " + std::to_string(v) + ").");
         }
         const int count = static_cast<int>(v);
-        // Ao reduzir, quem estava numa CPU removida volta à fila (preempção).
+        // Ao reduzir, a tarefa de uma CPU removida volta à fila (preempção).
         for (int c = count; c < static_cast<int>(s.cpus.size()); ++c) {
             const int index = s.cpus[c].taskIndex;
             if (index < 0) continue;
@@ -578,8 +568,8 @@ EditResult applyEditTo(SystemSnapshot& s, const Edit& e) {
         }
         const int before = static_cast<int>(s.cpus.size());
         s.cpus.resize(static_cast<std::size_t>(count));
-        // CPU nova: conta como desligada desde o início (busy + off = instante,
-        // invariante 7) e é ligada pelo despacho se receber tarefa.
+        // CPU nova conta como desligada desde o instante 0 (invariante 7:
+        // ocupada + desligada = instante); o despacho a liga se receber tarefa.
         for (int c = before; c < count; ++c) {
             s.cpus[c] = CPU();
             s.cpus[c].id = c;
@@ -637,18 +627,18 @@ bool Simulator::load(const Config& config) {
 }
 
 bool Simulator::stepForward() {
-    if (cursor_ + 1 < history_.size()) {   // o próximo já existe: reaproveita
+    if (cursor_ + 1 < history_.size()) {   // instante já calculado
         cursor_++;
         return true;
     }
-    if (isFinished()) return false;        // nada mais a simular
+    if (isFinished()) return false;        // fim da simulação
     history_.push_back(makeNext(history_[cursor_]));
     edits_.push_back({});
     cursor_++;
     return true;
 }
 
-bool Simulator::stepBack() {               // voltar: só move o índice
+bool Simulator::stepBack() {               // só move o cursor
     if (cursor_ == 0) return false;
     cursor_--;
     return true;
@@ -668,13 +658,13 @@ RunSummary Simulator::jumpTo(Tick tick, std::size_t maxBytes) {
         summary.message = "O instante deve ser 0 ou maior.";
         return summary;
     }
-    // Para trás (ou para um instante já calculado): só move o cursor, O(1).
+    // Instante já calculado: só move o cursor.
     if (static_cast<std::size_t>(tick) < history_.size()) {
         cursor_ = static_cast<std::size_t>(tick);
         return RunSummary{isFinished(), tick, ""};
     }
-    // Para a frente: calcula o que faltar. Tarefa suspensa não impede, porque o
-    // usuário pediu um instante específico; só o fim e a memória param antes.
+    // Para a frente: calcula o que falta. Tarefa suspensa não impede, porque o
+    // usuário pediu um instante específico; param antes só o fim e a memória.
     cursor_ = history_.size() - 1;
     RunSummary summary = advance(tick, maxBytes, false);
     if (summary.message.empty() && current().tick < tick) {
@@ -687,9 +677,8 @@ RunSummary Simulator::jumpTo(Tick tick, std::size_t maxBytes) {
 EditResult Simulator::applyEdit(const Edit& edit) {
     const std::size_t k = cursor_;
 
-    // 1. Refaz o instante k só até ANTES do escalonador (D28): a partir de
-    //    history[k-1] (consome o tick e processa conclusões/ativações/prazos)
-    //    ou, no instante 0, a partir da configuração carregada.
+    // 1. Refaz o instante k até antes do escalonador (D28), a partir de
+    //    history[k-1] ou, no instante 0, da configuração carregada.
     SystemSnapshot s = (k == 0) ? baseState(config_) : history_[k - 1];
     if (k > 0) {
         s.occurrences.clear();
@@ -698,22 +687,21 @@ EditResult Simulator::applyEdit(const Edit& edit) {
     }
     beginInstant(s);
 
-    // 2. Reaplica as edições já feitas neste mesmo instante, na mesma ordem
-    //    (senão a segunda edição em k apagaria a primeira).
+    // 2. Reaplica as edições anteriores deste instante, na mesma ordem.
     for (const Edit& previous : edits_[k]) applyEditTo(s, previous);
 
-    // 3. A edição nova. Recusada => nada muda (history_, edits_ e cursor_ intactos).
+    // 3. Edição nova. Se recusada, history_, edits_ e cursor_ não mudam.
     EditResult result = applyEditTo(s, edit);
     if (!result.ok) return result;
 
-    // 4. Uma edição pode trazer uma ativação ou um prazo para agora (ex.: novo
-    //    ingresso = instante atual, prazo reduzido); os dois passos são
-    //    idempotentes. Depois, o escalonador já vê o estado editado (D28).
+    // 4. A edição pode trazer uma ativação ou um prazo para este instante (novo
+    //    ingresso, prazo reduzido); os dois passos são idempotentes. Depois, o
+    //    escalonador decide sobre o estado editado (D28).
     releaseActivations(s);
     checkDeadlines(s);
     scheduleAndDispatch(s);
 
-    // 5. O futuro calculado antes deixou de valer (D15): descarta e segue daqui.
+    // 5. O futuro calculado antes deixou de valer (D15).
     std::vector<Edit> done = edits_[k];
     done.push_back(edit);
     history_.resize(k);
@@ -737,9 +725,9 @@ std::size_t estimateSnapshotBytes(const SystemSnapshot& s) {
 
 RunSummary Simulator::advance(Tick target, std::size_t maxBytes, bool stopWhenStalled) {
     RunSummary summary;
-    // Tamanho estimado do histórico = nº de snapshots x tamanho do snapshot atual
-    // (os snapshots de uma simulação têm tamanhos parecidos). Recalculado a cada
-    // 64 passos para não custar mais que a própria simulação.
+    // Histórico estimado = nº de snapshots x tamanho do snapshot atual (os
+    // snapshots de uma simulação têm tamanhos parecidos). O tamanho é
+    // recalculado a cada 64 passos para a estimativa não pesar no laço.
     std::size_t perSnapshot = estimateSnapshotBytes(current());
     std::size_t steps = 0;
     while (!isFinished() && current().tick < target) {
