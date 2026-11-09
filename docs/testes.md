@@ -154,7 +154,7 @@ Gerador com semente fixa (reproduzível): 10 000 sistemas com 1–12 tarefas, `p
 
 > Fase 6: os itens marcados foram verificados por um teste roteirizado da janela (fora da entrega, com imagens de cada tela) e pela exportação sem janela a partir de uma cópia do `dist/` com `PATH` mínimo. Os desmarcados exigem hardware ou clique humano: fazer na Fase 7.
 
-- [ ] Abrir config de pendrive, de outra partição, de pasta com espaço e acento, com nome arbitrário (A3.3.4). *(pasta com espaço e acento: verificado; pendrive e outra partição: Fase 7)*
+- [ ] Abrir config de pendrive, de outra partição, de pasta com espaço e acento, com nome arbitrário (A3.3.4). *(pasta com espaço e acento: verificado; outra partição (D:), com nome `minha config.cfg`: verificado na Fase 7; pendrive: teste físico pendente)*
 - [x] Arquivo inválido: tela de erros com linha/campo/motivo; a janela não trava; nada é carregado.
 - [x] Arquivo com tarefas aperiódicas: aviso claro de "ignoradas" (A4.4).
 - [x] Passo a passo: avançar, retroceder, ir para tick N; o relógio acompanha (A1.5.2); o Gantt atualiza a cada passo (A2.3).
@@ -162,9 +162,9 @@ Gerador com semente fixa (reproduzível): 10 000 sistemas com 1–12 tarefas, `p
 - [x] Modo completo mostra só o resultado final (A1.5.3); ao fim gera PNG + SVG da simulação inteira (A2.4); abrir o PNG e conferir que **não** é print da janela.
 - [x] Ordem do eixo Y: menor ID colado no eixo X (A2.5); cores do arquivo; ausência de cor = pronta; preto pontilhado = suspensa (A2.1).
 - [x] Legenda completa e todos os ícones distintos (RG3); CPU de cada execução visível (`CPUk`); CPUs desligadas visíveis e somadas no painel (A1.2).
-- [x] 1 CPU e 64 CPUs; 200 tarefas; simulação de 100 000 ticks exporta sem travar *(64 CPUs + 200 tarefas: ~8 s; ~93 000 ticks: ~9 s)*. Zoom e rolagem fluidos: conferir com o mouse na Fase 7.
+- [x] 1 CPU e 64 CPUs; 200 tarefas; simulação de 100 000 ticks exporta sem travar *(64 CPUs + 200 tarefas: ~8 s; ~93 000 ticks: ~9 s)*. Zoom e rolagem fluidos *(Fase 7: Ctrl+roda e rolagem simuladas, pior caso 25 ms; conferir também com o mouse na defesa)*.
 - [x] Fechar a janela durante o "play" não trava nem vaza.
-- [ ] **Standalone (RG5):** gerar `dist/`, copiar para um caminho novo, rodar com `PATH` mínimo (Windows: `set PATH=C:\Windows\System32` e executar o `.exe`) e, idealmente, em VM/Windows Sandbox sem Qt instalado. *(cópia + PATH mínimo: verificado; VM/Sandbox: Fase 7)*
+- [ ] **Standalone (RG5):** gerar `dist/`, copiar para um caminho novo, rodar com `PATH` mínimo (Windows: `set PATH=C:\Windows\System32` e executar o `.exe`) e, idealmente, em VM/Windows Sandbox sem Qt instalado. *(cópia + PATH mínimo: verificado de novo na Fase 7, com a cópia limpa dos arquivos de `simulador/`; esta máquina não tem Windows Sandbox: falta testar num PC sem Qt)*
 
 ## 8. Qualidade de build
 

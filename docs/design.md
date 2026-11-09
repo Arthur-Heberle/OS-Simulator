@@ -14,7 +14,7 @@ Princípios (valem para toda linha de código):
 
 1. **Núcleo sem Qt.** Tudo da simulação é C++17 puro (STL). Qt só existe na camada visual. O núcleo compila e é testado sem janela.
 2. **Determinismo total.** Mesma configuração + mesma semente + mesmas edições ⇒ mesmo histórico, bit a bit. Nada de relógio real, `rand()`, ponteiros como chave, ordem de `unordered_map`.
-3. **Todo o estado mutável vive em `SystemSnapshot`** (copiável por valor, **sem ponteiros**: referências por índice). O `Simulator` só guarda `history` + `cursor`.
+3. **Todo o estado mutável vive em `SystemSnapshot`** (copiável por valor, **sem ponteiros**: referências por índice). O `Simulator` só guarda `history` + `cursor` (mais a `Config` e as edições, para recalcular um instante editado: D21).
 4. **Regras são funções livres** sobre o snapshot; **escalonador é função** registrada por nome (A4.2). Nada de "classe-deus".
 5. **Um único renderizador** desenha na tela, em PNG e em SVG (A2.4: nunca capturar a tela).
 6. **Toda informação de tarefa mora no `Task` (TCB)** (A1.3).
@@ -272,13 +272,14 @@ SystemSnapshot makeNext(const SystemSnapshot& prev) {
     runOneTick(s);            // consome 1 tick: Running.remaining--, runTicks++, waitTicks++ (Ready),
                               //    CPU.ticksBusy/ticksOff, quantumUsed
     s.tick = prev.tick + 1;
-    processInstant(s);        // finishActivations -> releaseActivations -> checkDeadlines
-                              //    -> escalonador (PriorityGroups) -> chooseTasks -> dispatch
+    beginInstant(s);          // finishActivations -> releaseActivations -> checkDeadlines
+    scheduleAndDispatch(s);   // escalonador (PriorityGroups) -> chooseTasks -> dispatch
     return s;
 }
-// instante 0: initState(config) monta o estado com tick = 0 e chama processInstant(s).
+// instante 0: initState(config) = baseState(config) + beginInstant + scheduleAndDispatch.
+// A edição manual (D28) é aplicada entre beginInstant e scheduleAndDispatch.
 ```
-Nomes no código (`Simulator.cpp`): `runOneTick` (passo de execução), `finishActivations` (1), `releaseActivations` (2), `checkDeadlines` (3), `chooseTasks` (4, sorteio), `dispatch` (5 e 6); `processInstant` encadeia os passos 1–6.
+Nomes no código (`Simulator.cpp`): `runOneTick` (passo de execução), `finishActivations` (1), `releaseActivations` (2), `checkDeadlines` (3), `chooseTasks` (4, sorteio), `dispatch` (5 e 6); `beginInstant` encadeia 1–3 e `scheduleAndDispatch` encadeia 4–6.
 
 **Ordem fixa dentro de um instante** (responde Q-A10):
 
