@@ -35,6 +35,13 @@
 #include <algorithm>
 #include <cmath>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX  // impede que windows.h defina as macros min/max
+#endif
+#include <windows.h>  // GlobalMemoryStatusEx
+#endif
+
 #include "Dialogs.h"
 #include "Parser.h"
 
@@ -252,6 +259,20 @@ void MainWindow::buildUi() {
 // Arquivo de configuração (A3.3.4, A3.3.6, A3.3.7)
 // -----------------------------------------------------------------------------
 
+std::size_t MainWindow::historyMemoryBudget() {
+    // Metade da memória física livre: sobra a outra metade para o sistema, para a
+    // exportação da imagem e para o resto do programa.
+    constexpr std::size_t minimum = std::size_t(256) << 20;
+#ifdef _WIN32
+    MEMORYSTATUSEX status;
+    status.dwLength = sizeof(status);
+    if (GlobalMemoryStatusEx(&status)) {
+        return std::max(minimum, static_cast<std::size_t>(status.ullAvailPhys / 2));
+    }
+#endif
+    return DEFAULT_MAX_HISTORY_BYTES;
+}
+
 bool MainWindow::readConfigFile(const QString& path, std::string& text, QString* error) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
@@ -307,6 +328,7 @@ bool MainWindow::openConfigFile(const QString& path) {
         runToEnd();  // A1.5.3: no modo completo, só o resultado final
     } else {
         refreshAll();
+        checkEnd();  // arquivo só com aperiódicas: a simulação já termina no instante 0
     }
     return true;
 }
@@ -345,6 +367,17 @@ void MainWindow::saveConfigDialog() {
 
 void MainWindow::stepForward() {
     if (!loaded_) return;
+    // Um instante novo aumenta o histórico; o "play" com tarefa suspensa não tem
+    // fim, então o mesmo teto de memória do "executar até o fim" vale aqui.
+    const bool atEnd = sim_.cursor() + 1 == sim_.history().size();
+    if (atEnd && !sim_.isFinished() &&
+        (sim_.history().size() + 1) * estimateSnapshotBytes(sim_.current()) > historyMemoryBudget()) {
+        stopPlay();
+        showMessage(true, QStringLiteral("Memória insuficiente"),
+                    QStringLiteral("O histórico de todos os instantes já ocupa quase toda a memória reservada para ele "
+                                   "(metade da memória livre do computador). A simulação não pode avançar mais."));
+        return;
+    }
     if (!sim_.stepForward()) {
         stopPlay();
         statusBar()->showMessage(QStringLiteral("A simulação já terminou."), 4000);
@@ -368,28 +401,28 @@ void MainWindow::runToEnd() {
     if (!loaded_) return;
     stopPlay();
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    const RunSummary summary = sim_.runToEnd();
+    const RunSummary summary = sim_.runToEnd(NO_TICK_LIMIT, historyMemoryBudget());
     QApplication::restoreOverrideCursor();
     log(qs(summary.message));
     refreshAll();
     if (!summary.finished) {
-        showMessage(false, QStringLiteral("Execução interrompida"), qs(summary.message));
+        showMessage(false, QStringLiteral("Execução interrompida"),
+                    qs(summary.message) + QStringLiteral("\n\nO gráfico até aqui pode ser gravado em Exportar imagem."));
     }
     checkEnd();
 }
 
-// Vai para o instante pedido (para trás ou para frente). Se a simulação termina antes,
-// fica no último instante e explica o motivo [A1.5.2, A5].
+// Vai para o instante pedido (para trás ou para a frente). Se não der para chegar
+// (fim da simulação ou memória), fica no último instante possível e explica [A1.5.2, A5].
 void MainWindow::jumpToTick(Tick tick) {
     if (!loaded_) return;
     stopPlay();
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    const bool reached = sim_.jumpTo(tick);
+    const RunSummary summary = sim_.jumpTo(tick, historyMemoryBudget());
     QApplication::restoreOverrideCursor();
-    if (!reached) {
-        showMessage(false, QStringLiteral("Instante inexistente"),
-                    QStringLiteral("A simulação termina no instante %1; não existe o instante %2. "
-                                   "O relógio foi para o último instante.").arg(sim_.current().tick).arg(tick));
+    if (!summary.message.empty()) {
+        showMessage(false, QStringLiteral("Instante não alcançado"),
+                    qs(summary.message) + QStringLiteral(" O relógio está no instante %1.").arg(sim_.current().tick));
     }
     log(QStringLiteral("Foi para o instante %1.").arg(sim_.current().tick));
     refreshAll();
@@ -465,6 +498,7 @@ bool MainWindow::applyEdits(const std::vector<Edit>& edits, const QString& what)
     ++timeline_;  // o futuro foi descartado (D15): a próxima chegada ao fim exporta de novo
     log(QStringLiteral("Edição aplicada no instante %1: %2 (o futuro foi recalculado).").arg(sim_.current().tick).arg(what));
     refreshAll();
+    checkEnd();  // forçar o término ou remover a última tarefa encerra a simulação [A2.4]
     return true;
 }
 

@@ -2,7 +2,8 @@
 // Parser.cpp — Implementação do parser do arquivo de configuração (Parser.h).
 //
 // Fluxo de parseConfig:
-//   1. normalizeText: tira o BOM e troca CRLF/CR por LF;
+//   1. toUtf8 converte UTF-16 e ANSI; normalizeText tira o BOM e troca
+//      CRLF/CR por LF;
 //   2. lê linha a linha contando TODAS as linhas (as mensagens apontam a linha
 //      real do arquivo); linhas em branco são ignoradas [A3.3.6];
 //   3. a 1ª linha útil é a do sistema (parseSystemLine); as demais são tarefas
@@ -85,6 +86,78 @@ std::string toUpper(std::string s) {
         c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
     }
     return s;
+}
+
+// Acrescenta o código Unicode 'cp' a 'out' em UTF-8.
+void appendUtf8(std::string& out, std::uint32_t cp) {
+    if (cp < 0x80) {
+        out += static_cast<char>(cp);
+    } else if (cp < 0x800) {
+        out += static_cast<char>(0xC0 | (cp >> 6));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+        out += static_cast<char>(0xE0 | (cp >> 12));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (cp >> 18));
+        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
+
+// true se 'text' é UTF-8 bem formado (sequências de 2 a 4 bytes completas).
+bool isValidUtf8(const std::string& text) {
+    for (std::size_t i = 0; i < text.size();) {
+        const auto c = static_cast<unsigned char>(text[i]);
+        const std::size_t length = c < 0x80 ? 1 : (c >> 5) == 0x6 ? 2 : (c >> 4) == 0xE ? 3 : (c >> 3) == 0x1E ? 4 : 0;
+        if (length == 0 || i + length > text.size()) return false;
+        for (std::size_t k = 1; k < length; ++k) {
+            if ((static_cast<unsigned char>(text[i + k]) & 0xC0) != 0x80) return false;
+        }
+        i += length;
+    }
+    return true;
+}
+
+// Converte o arquivo para UTF-8, a codificação usada no resto do programa.
+// O Bloco de Notas grava "Unicode" como UTF-16 com BOM e "ANSI" como
+// Windows-1252; os dois são texto simples e precisam carregar [A3.3, A3.3.7].
+// 'encoding' recebe o nome da codificação convertida (vazio se já era UTF-8).
+// Bytes de 0x80 a 0xFF fora de UTF-8 são lidos como Latin-1, que coincide com
+// o Windows-1252 nas letras acentuadas.
+std::string toUtf8(const std::string& raw, std::string& encoding) {
+    encoding.clear();
+    const bool littleEndian = raw.size() >= 2 && raw[0] == '\xFF' && raw[1] == '\xFE';
+    const bool bigEndian = raw.size() >= 2 && raw[0] == '\xFE' && raw[1] == '\xFF';
+    std::string out;
+    if (littleEndian || bigEndian) {
+        encoding = "UTF-16";
+        auto unit = [&raw, bigEndian](std::size_t i) {
+            const auto a = static_cast<unsigned char>(raw[i]);
+            const auto b = static_cast<unsigned char>(raw[i + 1]);
+            return static_cast<std::uint32_t>(bigEndian ? (a << 8) | b : (b << 8) | a);
+        };
+        for (std::size_t i = 2; i + 1 < raw.size(); i += 2) {
+            std::uint32_t cp = unit(i);
+            if (cp >= 0xD800 && cp <= 0xDFFF) {  // par substituto (caractere fora do plano básico)
+                const std::uint32_t low = i + 3 < raw.size() ? unit(i + 2) : 0;
+                if (cp <= 0xDBFF && low >= 0xDC00 && low <= 0xDFFF) {
+                    cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                    i += 2;
+                } else {
+                    cp = 0xFFFD;  // metade de par isolada: caractere de substituição
+                }
+            }
+            appendUtf8(out, cp);
+        }
+        return out;
+    }
+    if (isValidUtf8(raw)) return raw;
+    encoding = "ANSI (Windows-1252)";
+    for (char c : raw) appendUtf8(out, static_cast<unsigned char>(c));
+    return out;
 }
 
 // Prepara o texto do arquivo para ser lido linha a linha (design.md §8, D18):
@@ -220,8 +293,9 @@ void parseSystemLine(const std::vector<std::string>& fields, int lineNumber, Par
         config.algorithm = algorithm;
     }
 
-    // Field 1: quantum (at least 1)
-    readSystemInt(fields, 1, "quantum", 1, MAX_QUANTUM, config.quantum, lineNumber, result);
+    // Campo 1: quantum. 0 é aceito (sem fatia de tempo): RM e EDF não usam o
+    // quantum (Q4), e recusar 0 barraria um arquivo válido [A3.3.7].
+    readSystemInt(fields, 1, "quantum", 0, MAX_QUANTUM, config.quantum, lineNumber, result);
 
     // Field 2: number of CPUs (between 1 and MAX_CPUS) [RG2]
     readSystemInt(fields, 2, "qtde_cpus", 1, MAX_CPUS, config.cpuCount, lineNumber, result);
@@ -466,7 +540,9 @@ void parseTaskLine(const std::vector<std::string>& fields, int lineNumber, Parse
 // Leitura propriamente dita; parser::parseConfig (abaixo) só a protege.
 static ParseResult parseText(const std::string& text) {
     ParseResult result;
-    std::stringstream stream(normalizeText(text));
+    std::string encoding;
+    std::stringstream stream(normalizeText(toUtf8(text, encoding)));
+    if (!encoding.empty()) addMessage(result, MsgCode::ConvertedEncoding, {encoding});
     std::string line;
     int lineNumber = 0;
     bool systemLineRead = false;
@@ -506,8 +582,8 @@ static ParseResult parseText(const std::string& text) {
     } else if (taskLines == 0) {
         addMessage(result, MsgCode::TooFewLines);       // [A3.3.1]
     } else if (simulated == 0 && result.errors.empty()) {
-        // Com outros erros, eles já explicam o problema; aqui o arquivo está
-        // certo, mas não sobra nenhuma tarefa periódica para simular.
+        // O arquivo obedece ao formato, então carrega [A3.3.7]; as aperiódicas
+        // são ignoradas e isso é avisado [A4.4]. A simulação termina no instante 0.
         addMessage(result, MsgCode::NoValidTasks);
     }
 

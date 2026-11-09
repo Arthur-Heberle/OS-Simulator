@@ -47,6 +47,11 @@ public:
     // modo sem janela (--exportar) do main.cpp.
     static bool readConfigFile(const QString& path, std::string& text, QString* error);
 
+    // Teto de memória do histórico: metade da memória física livre agora (no
+    // Windows) ou DEFAULT_MAX_HISTORY_BYTES. A simulação não tem limite de tempo
+    // [A2.4]; o histórico precisa caber na memória [A1.5.2].
+    static std::size_t historyMemoryBudget();
+
     // Abre e carrega um arquivo de configuração: mostra a Tela 2 se houver
     // erros ou avisos; com erro, nada é carregado (D18). true se carregou.
     bool openConfigFile(const QString& path);

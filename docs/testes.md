@@ -125,7 +125,7 @@ Cada caso passa a **string** a `parseConfig` e verifica `errors`/`warnings`/camp
 | P13 | `periodo=0` (aperiódica), ID `BS01` com período > 0, + 1 tarefa periódica válida | `ok()`; a aperiódica fica `ignored` com `ignoredReason` e **aviso** claro (D7); `BS01` carrega como **periódica comum**, sem aviso (Q12); a válida carrega |
 | P14 | Ida e volta: `parseConfig` → `serializeConfig` → `parseConfig` | Configs iguais; `lista_eventos` com `;` internos preservada; prazo vazio ⇒ preenchido com o período |
 
-Casos extras de robustez: arquivo vazio; só espaços; 100 000 tarefas (tempo razoável); linha de 1 MB; bytes binários; nenhuma tarefa simulável (todas ignoradas) ⇒ erro claro.
+Casos extras de robustez: arquivo vazio; só espaços; 100 000 tarefas (tempo razoável); linha de 1 MB; bytes binários; só tarefas aperiódicas ⇒ carrega com aviso e termina no instante 0 (Fase 7); quantum 0 ⇒ carrega; UTF-16 (LE e BE) e ANSI ⇒ convertidos com aviso.
 
 ---
 

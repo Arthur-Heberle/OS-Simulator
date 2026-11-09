@@ -1,6 +1,6 @@
 # Projeto A — Checklist de requisitos (recuperado do histórico do Git, commit 8ba93a4, e atualizado)
 
-> **Atualização (09/11/2026, fim da Fase 7):** a auditoria da Fase 7 achou falhas em A2.4, A3.3.1, A3.3.6, A3.3.7 e A4.4; os itens afetados voltaram para `[ ]` com a nota da falha e são corrigidos na branch `fix/` seguinte. Outra partição (D:) e zoom/rolagem verificados.
+> **Atualização (09/11/2026, fim da Fase 7):** a auditoria da Fase 7 achou falhas em A2.4, A3.3.1, A3.3.6, A3.3.7, A4.4 e A5, corrigidas na branch `fix/carregamento-e-navegacao` (testes em `testParserSystemAndIds`, `testParserRobustness`, `testEditKinds`, `testGoldenG6`, `testRunToEnd` e no teste roteirizado da janela). Outra partição (D:) e zoom/rolagem verificados.
 >
 > **Atualização (30/10/2026):** itens marcados `[x]` na Fase 7, com a evidência da tabela abaixo; os `[ ]` têm a nota do que falta.
 >
@@ -133,11 +133,11 @@
 - [x] No passo a passo, o Gantt atualizado aparece na tela a cada passo.
 
 **A2.4 — Exportação da imagem**
-- [ ] Ao final da simulação, gera um arquivo de imagem (JPG, PNG, SVG etc.). *(falha: quando o fim vem de uma edição (forçar término/remover), não exporta nem abre a Tela 6)*
+- [x] Ao final da simulação, gera um arquivo de imagem (JPG, PNG, SVG etc.). *(também quando o fim vem de uma edição: corrigido na Fase 7)*
 - [x] A imagem corresponde à situação final, depois de todas as tarefas executarem.
 - [x] A imagem **não** é um print da janela.
 - [x] A imagem contém a simulação inteira.
-- [ ] A imagem não está limitada a nenhum tempo máximo de simulação. *(falha: o histórico em memória para em ~1 GiB; com 100 tarefas isso dá ~26 000 instantes e a simulação não chega ao fim)*
+- [x] A imagem não está limitada a nenhum tempo máximo de simulação. *(sem limite de instantes desde a Fase 7; o único teto é a memória do histórico, metade da memória livre, porque o A1.5.2 exige o histórico em memória: design.md §9)*
 
 **A2.5 — Estilo e ordem**
 - [x] O Gantt é similar às figuras da seção 6.4 do livro do Prof. Maziero.
@@ -162,7 +162,7 @@
 - [x] Linha 1: `algoritmo_escalonamento;quantum;qtde_cpus`.
 - [x] Linhas seguintes: `id;cor;ingresso;duracao;periodo;prazo;lista_eventos`.
 - [x] `algoritmo_escalonamento` define o algoritmo usado.
-- [x] `quantum` é o tempo máximo que uma tarefa pode executar.
+- [x] `quantum` é o tempo máximo que uma tarefa pode executar. *(lido, guardado e exibido; 0 a 10⁶; RM e EDF não usam, Q4)*
 - [x] `qtde_cpus` aceita valores entre 1 e N.
 - [x] `id` é um identificador único.
 - [x] `cor` está em RGB hexadecimal (ex.: `F0E0D0`).
@@ -179,7 +179,7 @@
 **A3.3.1 — Estrutura do arquivo**
 - [x] A linha 1 tem os parâmetros gerais. Da linha 2 em diante, uma tarefa por linha.
 - [x] O arquivo tem no mínimo 2 linhas.
-- [ ] Não há limite máximo de tarefas. *(falha: o parser aceita 100 000 tarefas, mas com 1 000 tarefas o limite de memória do histórico para a simulação no instante ~1 850)*
+- [x] Não há limite máximo de tarefas. *(o parser aceita 100 000 tarefas; a simulação só para se o histórico não couber na memória livre, com mensagem clara)*
 
 **A3.3.2 — Maiúsculas e minúsculas**
 - [x] Todas as strings são tratadas sem diferenciar maiúsculas e minúsculas (ex.: `PRIOP` = `priop` = `PrioP`).
@@ -197,12 +197,12 @@
 - [x] A estrutura suporta inúmeros eventos ao longo da execução de uma tarefa.
 
 **A3.3.6 — Erros no arquivo**
-- [ ] Erros de carregamento são mostrados ao usuário com o motivo. *(falha: arquivo UTF-16 (Bloco de Notas "Unicode") gera dezenas de erros ilegíveis)*
+- [x] Erros de carregamento são mostrados ao usuário com o motivo. *(UTF-16 e ANSI convertidos com aviso; erros de arquivo em português: Fase 7)*
 - [x] Erros no conteúdo do arquivo são mostrados ao usuário com o motivo.
 - [x] Espaços e linhas em branco **não** são erros e são ignorados.
 
 **A3.3.7 — Falha grave**
-- [ ] Nenhum arquivo válido, que obedeça ao formato, gera erro de carregamento (testado com uma bateria de arquivos). *(falhas: `quantum` 0 é recusado; arquivo só com tarefas aperiódicas é recusado)*
+- [x] Nenhum arquivo válido, que obedeça ao formato, gera erro de carregamento (testado com uma bateria de arquivos). *(quantum 0 e arquivo só com aperiódicas carregam desde a Fase 7)*
 
 **A3.4 — Modificação de tarefas**
 - [x] O usuário modifica o estado atual de qualquer tarefa em qualquer passo/estágio.
@@ -231,13 +231,13 @@
 
 **A4.4 — Tipos de tarefa no Projeto A**
 - [x] A simulação suporta somente tarefas periódicas.
-- [ ] Tarefas aperiódicas são ignoradas. *(falha: se todas forem aperiódicas, o arquivo é recusado em vez de carregado com aviso)*
+- [x] Tarefas aperiódicas são ignoradas. *(inclusive quando todas são aperiódicas: carrega com aviso e termina no instante 0)*
 - [x] A presença de tarefas aperiódicas é reportada claramente ao usuário.
 - [x] Cada tarefa periódica termina após executar 10 vezes.
 
 ### A5 — Interface
 - [ ] A interface é intuitiva e fácil de entender e usar. *(subjetivo: avaliar na defesa)*
-- [ ] Qualquer erro durante o uso é apresentado claramente, com o motivo. *(falha: "Ir para o instante" muito à frente com tarefa suspensa esgota a memória e fecha o programa)*
+- [x] Qualquer erro durante o uso é apresentado claramente, com o motivo. *("Ir para o instante" e "avançar" respeitam o teto de memória com mensagem: Fase 7)*
 
 ---
 

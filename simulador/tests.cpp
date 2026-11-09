@@ -546,7 +546,11 @@ static void testParserSystemAndIds() {
     }
     CHECK_EQ(parse("RM;2;1\n1;FF0000;0;1;4;4\n").config.cpuCount, 1);
     CHECK_EQ(parse("RM;2;64\n1;FF0000;0;1;4;4\n").config.cpuCount, MAX_CPUS);
-    CHECK(!parse("RM;0;1\n1;FF0000;0;1;4;4\n").ok());  // quantum >= 1
+    // Quantum 0 carrega (RM e EDF não usam quantum, Q4; A3.3.7); negativo é erro.
+    const ParseResult zeroQuantum = parse("RM;0;1\n1;FF0000;0;1;4;4\n");
+    CHECK(zeroQuantum.ok());
+    CHECK_EQ(zeroQuantum.config.quantum, 0);
+    CHECK(hasMessage(parse("RM;-1;1\n1;FF0000;0;1;4;4\n").errors, {"quantum", "entre 0 e"}));
 
     // P10: id duplicado, sem diferenciar maiúsculas, citando as duas linhas.
     const ParseResult dup = parse("RM;2;1\na1;FF0000;0;1;4;4\nX;00FF00;0;1;4;4\nA1;0000FF;0;1;4;4\n");
@@ -676,10 +680,40 @@ static void testParserRobustness() {
     CHECK(hasMessage(parse("").errors, {"vazio"}));
     CHECK(hasMessage(parse("   \n\t\n  \r\n").errors, {"vazio"}));
 
-    // Nenhuma tarefa simulável (todas aperiódicas): erro claro.
+    // Só aperiódicas: o arquivo obedece ao formato, então carrega [A3.3.7]; as
+    // tarefas são ignoradas com aviso [A4.4] e a simulação termina no instante 0.
     const ParseResult allIgnored = parse("RM;2;1\n1;FF0000;0;1;0;4\n2;00FF00;0;1;0;4\n");
-    CHECK(!allIgnored.ok());
-    CHECK(hasMessage(allIgnored.errors, {"Nenhuma tarefa periódica"}));
+    CHECK(allIgnored.ok());
+    CHECK(hasMessage(allIgnored.warnings, {"Nenhuma tarefa periódica"}));
+    Simulator empty;
+    CHECK(empty.load(allIgnored.config));
+    CHECK(empty.isFinished());
+    CHECK_EQ(empty.runToEnd().ticks, 0);
+
+    // Codificações do Bloco de Notas: UTF-16 ("Unicode", LE e BE, com BOM) e
+    // ANSI (Windows-1252) são convertidas para UTF-8 com um aviso.
+    auto utf16 = [](const std::string& ascii, bool bigEndian) {
+        std::string out = bigEndian ? std::string{static_cast<char>(0xFE), static_cast<char>(0xFF)}
+                                    : std::string{static_cast<char>(0xFF), static_cast<char>(0xFE)};
+        for (char c : ascii) {
+            const char zero = 0;
+            out += bigEndian ? std::string{zero, c} : std::string{c, zero};
+        }
+        return out;
+    };
+    for (bool bigEndian : {false, true}) {
+        const ParseResult r = parse(utf16("EDF;2;1\r\nT1;FF0000;0;1;4;4\r\n", bigEndian));
+        CHECK(r.ok());
+        CHECK_EQ(r.config.algorithm, std::string("EDF"));
+        CHECK(r.config.tasks.size() == 1 && r.config.tasks[0].id == "T1");
+        CHECK(hasMessage(r.warnings, {"UTF-16"}));
+    }
+    const ParseResult fromUtf8 = parse("EDF;2;1\nTarefa \xC3\xA7;FF0000;0;1;4;4\n");  // "ç" em UTF-8
+    CHECK(fromUtf8.ok() && fromUtf8.warnings.empty());                              // UTF-8: sem aviso
+    const ParseResult fromAnsi = parse("EDF;2;1\nTarefa \xE7;FF0000;0;1;4;4\n");       // "ç" em Windows-1252
+    CHECK(fromAnsi.ok());
+    CHECK(fromAnsi.config.tasks.size() == 1 && fromAnsi.config.tasks[0].id == fromUtf8.config.tasks[0].id);
+    CHECK(hasMessage(fromAnsi.warnings, {"ANSI"}));
 
     // Linha de 1 MB (vai inteira para a lista de eventos).
     const ParseResult hugeLine = parse("RM;2;1\n1;FF0000;0;1;4;4;" + std::string(1 << 20, 'x') + "\n");
@@ -1126,11 +1160,11 @@ static void testGoldenG6() {
 
     // jumpTo para trás e para a frente; o relógio acompanha o cursor.
     for (Tick k : {5, 25, 0, 30, 38}) {  // G3 termina no instante 40
-        CHECK(sim.jumpTo(k));
+        CHECK(sim.jumpTo(k).message.empty());
         CHECK_EQ(sim.current().tick, k);
     }
-    CHECK(!sim.jumpTo(-1));
-    CHECK(!sim.jumpTo(1000000));                             // termina antes
+    CHECK(!sim.jumpTo(-1).message.empty());
+    CHECK(sim.jumpTo(1000000).message.find("termina no instante 40") != std::string::npos);
     CHECK(sim.isFinished());
 
     // Editar no passado: futuro descartado e nova linha do tempo determinística.
@@ -1226,7 +1260,8 @@ static void testEditKinds() {
     CHECK(c.applyEdit(makeEdit(EditKind::SetAlgorithm, -1, 0, "edf")).ok);
     CHECK_EQ(c.current().algorithm, std::string("EDF"));
     expectRefused(c, makeEdit(EditKind::SetAlgorithm, -1, 0, "XYZ"), "disponíveis");
-    expectRefused(c, makeEdit(EditKind::SetQuantum, -1, 0), "quantum");
+    expectRefused(c, makeEdit(EditKind::SetQuantum, -1, -1), "quantum");
+    CHECK(c.applyEdit(makeEdit(EditKind::SetQuantum, -1, 0)).ok);
     CHECK(c.applyEdit(makeEdit(EditKind::SetSeed, -1, 7)).ok);
     CHECK_EQ(c.current().seed, 7u);
     expectRefused(c, makeEdit(EditKind::SetSeed, -1, -1), "semente");
@@ -1285,7 +1320,7 @@ static void testRunToEnd() {
     std::string many = "EDF;2;2\n";
     for (int i = 0; i < 2000; ++i) many += "T" + std::to_string(i) + ";;0;1;1000\n";
     Simulator heavy = loadSim(many);
-    const RunSummary byMemory = heavy.runToEnd(DEFAULT_MAX_TICKS, std::size_t(20) << 20);  // 20 MB
+    const RunSummary byMemory = heavy.runToEnd(NO_TICK_LIMIT, std::size_t(20) << 20);  // 20 MB
     CHECK(!byMemory.finished);
     CHECK(byMemory.message.find("20 MB") != std::string::npos);
     CHECK(heavy.history().size() * estimateSnapshotBytes(heavy.current()) < (std::size_t(25) << 20));
@@ -1305,6 +1340,17 @@ static void testRunToEnd() {
     CHECK(stuck.current().tick < 100);
     CHECK(!stalled(loadSim(G1_TEXT).current()));
     CHECK(noViolations(checkInvariants(stuck.history())));
+
+    // jumpTo com tarefa suspensa: o relógio pode avançar (o usuário pediu o
+    // instante), mas o histórico respeita o teto de memória em vez de crescer
+    // até o programa fechar (achado na auditoria da Fase 7).
+    CHECK(stuck.jumpTo(stuck.current().tick + 50).message.empty());
+    const RunSummary capped = stuck.jumpTo(2000000000, std::size_t(4) << 20);  // 4 MB
+    CHECK(capped.message.find("4 MB") != std::string::npos);
+    CHECK(stuck.history().size() * estimateSnapshotBytes(stuck.current()) <= (std::size_t(4) << 20));
+
+    // Sem limite de instantes por padrão [A2.4]: só a memória limita.
+    CHECK_EQ(NO_TICK_LIMIT, std::numeric_limits<Tick>::max());
 }
 
 // Desempenho: avançar um passo com 100 tarefas leva menos de 16 ms (um quadro

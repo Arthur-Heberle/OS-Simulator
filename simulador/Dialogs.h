@@ -299,7 +299,7 @@ public:
         form->addRow(QStringLiteral("Algoritmo:"), algorithm_);
         // [TELA 5 / E5.2] origem: SystemSnapshot::quantum (RM/EDF não usam, Q4).
         quantum_ = new QSpinBox;
-        quantum_->setRange(1, MAX_QUANTUM);
+        quantum_->setRange(0, MAX_QUANTUM);
         quantum_->setValue(s.quantum);
         form->addRow(QStringLiteral("Quantum:"), quantum_);
         // [TELA 5 / E5.3] origem: SystemSnapshot::cpus.size() (1..MAX_CPUS, D12).
