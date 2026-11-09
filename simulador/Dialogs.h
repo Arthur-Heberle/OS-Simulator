@@ -3,17 +3,14 @@
 // carregamento, editar tarefa, nova tarefa, configurações do sistema e fim da
 // simulação.
 //
-// O quê: cada tela é uma QDialog pequena. As telas de edição (3, 4 e 5) NÃO
-// mudam a simulação: só montam os pedidos (Edit) a partir do que o usuário
-// alterou. Quem aplica é a MainWindow, com Simulator::applyEdit, que valida e
-// explica a recusa (A3.4).
+// As telas de edição (3, 4 e 5) não alteram a simulação: montam os pedidos
+// (Edit) com o que o usuário mudou, e a MainWindow os aplica com
+// Simulator::applyEdit, que valida e explica a recusa [A3.4]. Assim toda regra
+// de validação fica no núcleo, coberta pelos testes. As classes são pequenas e
+// ficam só no cabeçalho, para economizar arquivos na entrega (D23, Q8).
 //
-// Por quê assim: toda regra de validação fica no núcleo (testada); a tela só
-// coleta valores e mostra o resultado. Implementação no próprio cabeçalho
-// (classes pequenas, sem .cpp) para economizar arquivos na entrega (D23, Q8).
-//
-// Comentários "[TELA x / Ey] origem: ..." numeram cada elemento visual e dizem
-// de onde vem a informação mostrada: são a base do PDF de telas da entrega.
+// Os comentários "[TELA x / Ey] origem: ..." numeram cada elemento visual e
+// indicam de onde vem a informação exibida (base do PDF das telas).
 //
 // Requisitos: A1.5.2, A3.1, A3.2, A3.3.6, A3.4, A4.4, A5, A1.2.
 // Decisões: D7, D8, D15, D17, D18, design.md §9 e §11.
@@ -167,7 +164,8 @@ public:
         // [TELA 3 / E3.6] origem: Task::color (RRGGBB).
         color_ = new QLineEdit(qs(task.color));
         form->addRow(QStringLiteral("Cor (RRGGBB):"), colorField(color_));
-        // [TELA 3 / E3.7] origem: jobs.front().remaining (só com ocorrência pendente).
+        // [TELA 3 / E3.7] origem: jobs.front().remaining. Desabilitado se não há
+        // ocorrência pendente.
         const Job* job = currentJob(task);
         remaining_ = tickBox(job ? job->remaining : 1, 1);
         if (job) remaining_->setMaximum(static_cast<int>(job->duration));

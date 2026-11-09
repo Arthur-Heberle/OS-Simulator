@@ -1,6 +1,6 @@
 // =============================================================================
-// GanttRenderer.cpp — Implementação do desenho do Gantt, da exportação PNG/SVG
-// e do widget. Ver o cabeçalho de GanttRenderer.h (o quê, por quê, requisitos).
+// GanttRenderer.cpp — Desenho do Gantt, exportação PNG/SVG e widget.
+// Contrato e requisitos em GanttRenderer.h.
 // =============================================================================
 
 #include "GanttRenderer.h"
@@ -27,7 +27,7 @@
 namespace {
 
 // ---------------------------------------------------------------------------
-// Constantes visuais (pixels). Ficam juntas para o estilo ser ajustado num só lugar.
+// Constantes visuais, em pixels.
 // ---------------------------------------------------------------------------
 const double MARGIN = 10;          // borda em volta do desenho
 const double TITLE_HEIGHT = 28;    // faixa do título
@@ -38,8 +38,8 @@ const double LEGEND_ROW = 24;      // altura de cada linha da legenda
 const double LEGEND_SAMPLE = 30;   // largura da amostra (barra/ícone) na legenda
 const int MAX_PNG_WIDTH = 30000;   // largura máxima de um PNG (design.md §10)
 
-// Cores dos ícones: uma por tipo, todas distintas e diferentes do preto/branco
-// usados nos estados (RG3: elemento gráfico distinto para cada evento).
+// Cores dos ícones: uma por tipo, distintas entre si e do preto e do branco dos
+// estados [RG3].
 const QColor ARRIVAL_COLOR(0, 150, 0);
 const QColor TERMINATION_COLOR(0, 80, 210);
 const QColor MISS_COLOR(220, 0, 0);
@@ -51,8 +51,8 @@ const QColor CPU_OFF_COLOR(120, 120, 120);
 const QColor GRID_COLOR(170, 170, 170);
 const QColor HIGHLIGHT_COLOR(255, 220, 0, 70);  // instante atual (translúcido)
 
-// Fontes com tamanho em PIXELS: o mesmo tamanho na tela, no PNG e no SVG
-// (pontos dependem da resolução de cada dispositivo).
+// Fontes com tamanho em pixels, e não em pontos, para terem o mesmo tamanho na
+// tela, no PNG e no SVG.
 QFont chartFont() {
     QFont font;
     font.setPixelSize(12);
@@ -65,7 +65,7 @@ QFont smallFont() {
     return font;
 }
 
-// Estado de uma célula (tarefa x instante) para o desenho (D2 + figuras do livro).
+// Desenho de uma célula (tarefa x instante) (D2).
 enum class Cell { None, Ready, Running, Suspended };
 
 // Converte o estado da tarefa na célula desenhada no instante: executando (cor),
@@ -85,7 +85,7 @@ QColor taskColor(const Task& task) {
     return color.isValid() ? color : QColor(Qt::gray);
 }
 
-// Texto preto ou branco conforme a luminância do fundo (legível em qualquer cor).
+// Texto preto ou branco conforme a luminância do fundo.
 QColor textColorOn(const QColor& background) {
     const double luminance = 0.299 * background.red() + 0.587 * background.green() +
                              0.114 * background.blue();
@@ -125,9 +125,9 @@ void drawPower(QPainter& p, QPointF center, double r, const QColor& color, bool 
     }
 }
 
-// Ícone de uma ocorrência na faixa [top, top+h] de uma linha, no instante x
-// (A2.2: no momento exato). Cada tipo ocupa uma parte da faixa para que
-// ícones do mesmo instante não se cubram.
+// Ícone de uma ocorrência no instante x, na faixa [top, top+h] de uma linha
+// [A2.2]. Cada tipo ocupa uma parte da faixa, para ícones do mesmo instante
+// não se sobreporem.
 void drawIcon(QPainter& p, OccurrenceType type, double x, double top, double h) {
     p.save();
     const double mid = top + h / 2;
@@ -204,9 +204,8 @@ void drawIcon(QPainter& p, OccurrenceType type, double x, double top, double h) 
     p.restore();
 }
 
-// Preenchimento pontilhado (suspensa: "cor preta e preenchimento diferente",
-// A2.1). Pontos desenhados um a um, e não por padrão de pincel, para sair
-// igual no PNG e no SVG.
+// Preenchimento preto pontilhado da tarefa suspensa [A2.1]. Os pontos são
+// desenhados um a um, e não com padrão de pincel, para sair igual no PNG e no SVG.
 void drawDots(QPainter& p, const QRectF& r) {
     p.setPen(Qt::NoPen);
     p.setBrush(Qt::black);
@@ -228,8 +227,8 @@ void drawHatch(QPainter& p, const QRectF& r) {
     }
 }
 
-// Uma barra (trecho contínuo no mesmo estado), no estilo do livro: contorno
-// preto; executando = cor sólida (+ "CPUk"); pronta = branco; suspensa = pontos.
+// Barra de um trecho contínuo no mesmo estado, no estilo do livro: contorno
+// preto; executando = cor sólida com "CPUk"; pronta = branco; suspensa = pontos.
 void drawBar(QPainter& p, const QRectF& r, Cell cell, const QColor& color, const QString& label) {
     const QPen outline(Qt::black, 1.2);
     if (cell == Cell::Running) {
@@ -261,7 +260,7 @@ void drawBar(QPainter& p, const QRectF& r, Cell cell, const QColor& color, const
 
 // Faixa vertical da linha 'row' e retângulo da barra dentro dela.
 double rowTop(double panelTop, int row, int rowHeight) { return panelTop + row * rowHeight; }
-// Retângulo da barra: deixa 22% de folga em cima e embaixo da linha para os ícones.
+// Retângulo da barra: 22% de folga em cima e embaixo, para os ícones.
 QRectF barRect(double x0, double x1, double top, int rowHeight) {
     return QRectF(x0, top + rowHeight * 0.22, x1 - x0, rowHeight * 0.56);
 }
@@ -290,8 +289,8 @@ struct LegendItem {
     OccurrenceType type;
     QString text;
 };
-// Itens da legenda [RG3]: os estados das células e um ícone por tipo de ocorrência.
-// É montada uma só vez (static) e reaproveitada pela tela e pelas imagens.
+// Itens da legenda [RG3]: os estados das células e um ícone por tipo de
+// ocorrência. Montada uma vez e usada pela tela e pelas imagens.
 const std::vector<LegendItem>& legendItems() {
     static const std::vector<LegendItem> items = {
         {0, OccurrenceType::Dispatch, QStringLiteral("Executando (cor da tarefa; CPUk = processador)")},
@@ -330,7 +329,7 @@ std::vector<QRectF> legendBoxes(double width) {
     return boxes;
 }
 
-// Passo dos rótulos do eixo: 1, 2, 5, 10, 20, 50... o menor que deixa espaço para o número.
+// Passo dos rótulos do eixo (1, 2, 5, 10, 20, 50...): o menor em que os números cabem.
 Tick chooseLabelStep(Tick lastTick, int tickWidth) {
     const double needed = QFontMetricsF(chartFont()).horizontalAdvance(QString::number(lastTick)) + 10;
     Tick step = 1;
@@ -377,8 +376,8 @@ GanttLayout GanttRenderer::layout(const std::vector<SystemSnapshot>& history, st
     }
     const SystemSnapshot& last = history[upto - 1];
 
-    // Faixa de tempo: até o último instante. Se a simulação acabou, o último
-    // instante só tem ocorrências (ex.: o último término), desenhadas na ponta do eixo.
+    // Faixa de tempo até o último instante. Com a simulação concluída, o último
+    // instante só tem ocorrências (ex.: o último término), na ponta do eixo.
     const Tick end = finished(last) ? std::max<Tick>(last.tick, 1) : last.tick + 1;
     L.from = std::max<Tick>(0, std::min(options.fromTick, end - 1));
     L.to = options.toTick >= 0 ? std::min(options.toTick, end) : end;
@@ -438,8 +437,7 @@ double GanttRenderer::legendHeight(double width) {
     return boxes.empty() ? 0 : boxes.back().bottom();
 }
 
-// Desenha a legenda dentro de 'area' (itens de legendItems). A tela e as imagens
-// usam esta mesma função, então a legenda é igual nos dois lugares [RG3, A2.4].
+// Desenha a legenda em 'area'. A tela e as imagens usam esta mesma função [RG3, A2.4].
 void GanttRenderer::paintLegend(QPainter& p, const QRectF& area) {
     p.save();
     p.setRenderHint(QPainter::Antialiasing, true);
@@ -491,7 +489,8 @@ void GanttRenderer::paint(QPainter& p, const QRectF& visible, const std::vector<
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setFont(chartFont());
 
-    // Só os instantes visíveis são desenhados em detalhe (100 000 ticks na tela).
+    // Só os instantes visíveis são desenhados, o que mantém a tela rápida com
+    // 100 000 instantes.
     const Tick t0 = std::max(L.from, L.tickAt(visible.left()) - 1);
     const Tick t1 = std::min(L.to, L.tickAt(visible.right()) + 2);  // colunas [t0, t1)
 
@@ -543,7 +542,7 @@ void GanttRenderer::paint(QPainter& p, const QRectF& visible, const std::vector<
         }
     }
 
-    // --- Barras das tarefas: trechos contínuos no mesmo estado viram UM retângulo.
+    // --- Barras das tarefas: cada trecho contínuo no mesmo estado é um retângulo.
     for (int r = 0; r < static_cast<int>(L.taskRows.size()); ++r) {
         const int i = L.taskRows[r];
         const double top = rowTop(L.tasksTop, r, rh);
@@ -747,10 +746,9 @@ QString GanttRenderer::describe(const std::vector<SystemSnapshot>& history, std:
 
 namespace {
 // Opções para exportar a simulação inteira: sem destaque de instante, com
-// legenda, e o tick reduzido de 24 até 4 px enquanto a largura passar de
-// ~30 000 px. Vale para o PNG (limite de memória da imagem) e para o SVG (com
-// tick menor os rótulos ficam mais espaçados e o arquivo, bem menor; o SVG
-// continua sendo um arquivo só, com a simulação inteira).
+// legenda e com o tick reduzido de 24 até 4 px enquanto a largura passar de
+// ~30 000 px. No PNG isso limita a memória da imagem; no SVG, que é sempre um
+// arquivo só, reduz o tamanho do arquivo.
 GanttOptions exportOptions(const GanttOptions& options, const std::vector<SystemSnapshot>& history) {
     GanttOptions o = options;
     o.fromTick = 0;
@@ -852,8 +850,8 @@ QString GanttRenderer::defaultBaseName(const QString& configName) {
 // Widget
 // ---------------------------------------------------------------------------
 
-// Área de desenho: do tamanho do conteúdo inteiro, dentro de uma QScrollArea;
-// pinta só a faixa exposta (event->rect()).
+// Área de desenho do tamanho do conteúdo inteiro, dentro de uma QScrollArea;
+// pinta só a faixa exposta.
 class GanttCanvas : public QWidget {
 public:
     explicit GanttCanvas(GanttWidget* owner) : owner_(owner) { setAttribute(Qt::WA_OpaquePaintEvent); }
@@ -908,8 +906,8 @@ protected:
 };
 }  // namespace
 
-// Monta o widget: área de rolagem com o desenho (canvas_) e a legenda fixa embaixo,
-// fora da rolagem, para ela não sumir quando o usuário rola o gráfico.
+// Área de rolagem com o desenho e, embaixo, a legenda fixa, fora da rolagem
+// para continuar visível.
 GanttWidget::GanttWidget(QWidget* parent) : QWidget(parent) {
     options_.showLegend = false;  // a legenda fica fixa, fora da rolagem
     canvas_ = new GanttCanvas(this);
@@ -945,7 +943,8 @@ void GanttWidget::setTickWidth(int pixels) {
     updateCanvas(true);
 }
 
-// Passo do zoom: 2 px abaixo de 16 px por tick e 8 px acima, para a mudança parecer uniforme.
+// Passo do zoom: 2 px abaixo de 16 px por tick e 8 px acima, para a mudança
+// parecer proporcional.
 void GanttWidget::zoomIn() { setTickWidth(options_.tickWidth < 16 ? options_.tickWidth + 2 : options_.tickWidth + 8); }
 void GanttWidget::zoomOut() { setTickWidth(options_.tickWidth <= 16 ? options_.tickWidth - 2 : options_.tickWidth - 8); }
 
@@ -957,7 +956,7 @@ void GanttWidget::updateCanvas(bool scrollToCurrent) {
         return;
     }
     // Um QWidget não passa de 16 777 215 px: em simulações enormes o zoom é
-    // reduzido o necessário (o PNG/SVG não têm esse limite: são exportados à parte).
+    // reduzido o necessário. A exportação não tem esse limite.
     QSize size = GanttRenderer::contentSize(*history_, upto_, options_);
     while (size.width() > QWIDGETSIZE_MAX && options_.tickWidth > 1) {
         options_.tickWidth = std::max(1, options_.tickWidth / 2);

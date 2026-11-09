@@ -1,23 +1,19 @@
 // =============================================================================
-// GanttRenderer.h — Gráfico de Gantt: um ÚNICO desenhista para a tela, o PNG
-// e o SVG, e o widget que o mostra na janela.
+// GanttRenderer.h — Gráfico de Gantt: o desenho (GanttRenderer) e o widget que
+// o exibe na janela (GanttWidget).
 //
-// O quê: GanttRenderer desenha, com QPainter, o histórico da simulação
-// (std::vector<SystemSnapshot>): uma linha por tarefa (menor ID colado no eixo
-// X), uma linha por CPU, eixo do tempo, ícones de cada ocorrência no instante
-// exato e a legenda. GanttWidget põe esse desenho numa área com rolagem, zoom,
-// tooltip e destaque do instante atual.
+// GanttRenderer desenha o histórico com QPainter: uma linha por tarefa (menor
+// id junto ao eixo X), uma linha por CPU, o eixo do tempo, os ícones de cada
+// ocorrência no instante exato e a legenda. A mesma função paint() desenha no
+// widget, numa QImage (PNG) e num QSvgGenerator (SVG), então a imagem
+// exportada nunca é uma captura da janela [A2.4].
 //
-// Por quê:
-//   - A2.4 proíbe que a imagem exportada seja um print da janela: aqui o MESMO
-//     paint() desenha num widget, numa QImage (PNG) e num QSvgGenerator (SVG).
-//   - O desenho segue as figuras da seção 6.4 do livro do Maziero (A2.5):
-//     barras contínuas com contorno preto, cor sólida = executando, branco =
-//     pronta, nada fora do sistema, linhas pontilhadas a cada instante, eixos
-//     com seta e "t". Os ícones de chegada/término/perda de prazo etc. são
-//     exigência do enunciado (A2.2, RG3) e ficam por cima desse estilo.
-//   - Coluna k = history[k] (D3): o snapshot do instante k diz quem executa em
-//     [k, k+1); as ocorrências dele são desenhadas em x = k.
+// O estilo segue as figuras da seção 6.4 do livro do Maziero [A2.5]: barras com
+// contorno preto, cor sólida = executando, branco = pronta, nada fora do
+// sistema, linhas pontilhadas a cada instante, eixos com seta. Os ícones de
+// eventos exigidos pelo enunciado [A2.2, RG3] são desenhados por cima.
+// A coluna k vem de history[k] (D3): quem executa em [k, k+1) e as ocorrências
+// desenhadas em x = k.
 //
 // Requisitos: RG3, A1.2 (CPU desligada visível), A2.1–A2.5, A4.3 (ícone de
 // sorteio). Decisões: D2, D3, D4, D11, D14, D17; design.md §10.

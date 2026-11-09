@@ -1,24 +1,21 @@
 // =============================================================================
 // tests.cpp — Testes automáticos do núcleo da simulação (executável sim_tests).
 //
-// O quê: verifica o núcleo (simcore) sem nenhuma janela e sem Qt.
-//   - Fase 0: teste de fumaça (build, structs copiáveis).
-//   - Fase 1: ferramentas de teste do contrato (serializeSnapshot, verificador
-//     de invariantes de histórico, helpers de consulta) e naturalIdLess.
-//   - Fase 2: parser P1–P14 e robustez (docs/testes.md §3).
-//   - Fase 3: motor (G1–G4, FIFO, invariantes 1–9, fuzz). 'sim_tests --rapido' roda o fuzz
-//     com 500 sistemas (dia a dia); 'sim_tests --grid'
-//     imprime as grades de G1, G2 e G3.
-//   - Fase 4: G5, G6, invariante 10, cada tipo de edição, limites do
-//     runToEnd, fuzz de edições e tempo do passo com 100 tarefas (< 16 ms).
+// Verifica o núcleo (simcore) sem janela e sem Qt. Casos descritos em
+// docs/testes.md:
+//   - contrato do Model.h: cópia por valor, serializeSnapshot, verificador de
+//     invariantes, naturalIdLess;
+//   - parser: P1–P14 e robustez (§3);
+//   - motor: cenários dourados G1–G4, escalonador FIFO (A4.2), invariantes 1–9
+//     e fuzz (§2, §4–§6);
+//   - histórico e edição: G5, G6, invariante 10, cada tipo de edição, limites
+//     de runToEnd/jumpTo, fuzz de edições e tempo do passo com 100 tarefas.
+// Opções: --rapido reduz o fuzz para 500 sistemas; --grid imprime as grades de
+// G1, G2 e G3.
 //
-// Por quê assim:
-//   - Sem GoogleTest ou outra biblioteca: a macro CHECK abaixo basta e evita
-//     dependência extra (design.md §2, "Testes"); tudo cabe em um arquivo
-//     (orçamento de 18 arquivos, D23).
-//   - CHECK não aborta no primeiro erro: conta as falhas e mostra todas, o que
-//     agiliza a depuração. O main devolve código != 0 se houver falha, para que
-//     scripts e a defesa vejam o resultado de imediato.
+// A macro CHECK dispensa biblioteca de testes (design.md §2) e não aborta no
+// primeiro erro: conta e mostra todas as falhas. O programa devolve código
+// diferente de 0 se alguma falhar.
 //
 // Requisitos: RG6 (comentários), A4.2 (núcleo separado da interface).
 // Decisões: D22 (sim_tests liga só no simcore), D23 (arquivo único de testes).
@@ -292,9 +289,9 @@ static bool noViolations(const std::vector<std::string>& violations) {
 }
 
 // -----------------------------------------------------------------------------
-// Teste trivial da Fase 0: o núcleo compila, liga e suas structs funcionam.
-// Prova também uma propriedade que o histórico vai exigir (D16, D21): um
-// SystemSnapshot é copiado por valor e a cópia é independente do original.
+// Teste de fumaça: o núcleo compila, liga e um SystemSnapshot copiado por
+// valor é independente do original, propriedade de que o histórico depende
+// (D16, D21).
 // -----------------------------------------------------------------------------
 static void testBuildSmoke() {
     // CPU começa sem tarefa (taskIndex = -1), como definido em Model.h (A1.2).
@@ -325,7 +322,7 @@ static void testBuildSmoke() {
 }
 
 // -----------------------------------------------------------------------------
-// Fase 1: contrato do Model.h.
+// Contrato do Model.h
 // -----------------------------------------------------------------------------
 
 // serializeSnapshot: cópia => mesmo texto; qualquer campo diferente => texto diferente.
@@ -423,11 +420,10 @@ static void testInvariantChecker() {
 
 
 // -----------------------------------------------------------------------------
-// Fase 2: parser (docs/testes.md §3, P1–P14 e robustez).
+// Parser (docs/testes.md §3: P1–P14 e robustez)
 // -----------------------------------------------------------------------------
 
-// Chama o parser e conta como falha se alguma exceção escapar (design.md §8:
-// o parser nunca lança para o chamador).
+// Chama o parser e conta como falha se alguma exceção escapar (design.md §8).
 static ParseResult parse(const std::string& text) {
     try {
         return parser::parseConfig(text);
@@ -466,8 +462,8 @@ static bool sameResult(const ParseResult& a, const ParseResult& b) {
            a.errors == b.errors && a.warnings == b.warnings;
 }
 
-// P1–P4, P6: caso feliz e variações de formatação que NÃO podem mudar nada
-// (A3.3.2, A3.3.3, A3.3.6, A3.3.7).
+// P1–P4, P6: caso básico e variações de formatação que não podem mudar o
+// resultado (A3.3.2, A3.3.3, A3.3.6, A3.3.7).
 static void testParserFormatting() {
     const ParseResult p1 = parse(P1_TEXT);
     CHECK(p1.ok());
@@ -739,12 +735,12 @@ static void testParserRobustness() {
 }
 
 // -----------------------------------------------------------------------------
-// Fase 3: motor de ticks (docs/testes.md §2 G1–G4, §4, §5, §6).
+// Motor (docs/testes.md §2 G1–G4, §4, §5, §6)
 // -----------------------------------------------------------------------------
 
-// Executa a configuração do instante 0 até o fim com makeNext em laço (a
-// classe Simulator com runToEnd é da Fase 4). 'maxTicks' é só uma trava de
-// segurança para um teste com defeito não rodar para sempre.
+// Executa a configuração do instante 0 até o fim com makeNext em laço, sem a
+// classe Simulator, para testar as regras isoladas. 'maxTicks' impede que um
+// defeito deixe o teste rodando para sempre.
 static std::vector<SystemSnapshot> runConfig(const std::string& text, uint64_t seed = 1,
                                              Tick maxTicks = 100000) {
     std::vector<SystemSnapshot> history;
@@ -1049,7 +1045,7 @@ static void testFuzz(int systems) {
 }
 
 // -----------------------------------------------------------------------------
-// Fase 4: histórico, navegação e edição (docs/testes.md G5, G6, invariante 10).
+// Histórico, navegação e edição (docs/testes.md G5, G6, invariante 10)
 // -----------------------------------------------------------------------------
 
 // Carrega um texto de configuração num Simulator novo.
@@ -1078,8 +1074,8 @@ static std::string fingerprint(const Simulator& sim) {
     return out;
 }
 
-// Uma edição que DEVE ser recusada: ok = false, motivo em português, e o
-// histórico e o cursor exatamente como estavam (critério da Fase 4).
+// Edição que deve ser recusada: ok = false, motivo com 'reasonPart', e
+// histórico e cursor exatamente como estavam.
 static void expectRefused(Simulator& sim, const Edit& edit, const std::string& reasonPart) {
     const std::string before = fingerprint(sim);
     const EditResult result = sim.applyEdit(edit);
@@ -1325,9 +1321,9 @@ static void testRunToEnd() {
     CHECK(byMemory.message.find("20 MB") != std::string::npos);
     CHECK(heavy.history().size() * estimateSnapshotBytes(heavy.current()) < (std::size_t(25) << 20));
 
-    // Tarefa suspensa e nunca retomada: a simulação não termina sozinha. runToEnd
-    // para assim que nada mais pode mudar (achado no teste da interface, Fase 6),
-    // depois de registrar todas as ativações e perdas de prazo dela.
+    // Tarefa suspensa e nunca retomada: a simulação não termina sozinha.
+    // runToEnd para quando nada mais pode mudar, depois de registrar todas as
+    // ativações e perdas de prazo dela.
     Simulator stuck = loadSim(G1_TEXT);
     stepTo(stuck, 4);
     CHECK(stuck.applyEdit(makeEdit(EditKind::Suspend, 0)).ok);
@@ -1341,9 +1337,9 @@ static void testRunToEnd() {
     CHECK(!stalled(loadSim(G1_TEXT).current()));
     CHECK(noViolations(checkInvariants(stuck.history())));
 
-    // jumpTo com tarefa suspensa: o relógio pode avançar (o usuário pediu o
-    // instante), mas o histórico respeita o teto de memória em vez de crescer
-    // até o programa fechar (achado na auditoria da Fase 7).
+    // jumpTo com tarefa suspensa: o relógio pode avançar até o instante pedido,
+    // mas o histórico respeita o teto de memória em vez de crescer até faltar
+    // memória.
     CHECK(stuck.jumpTo(stuck.current().tick + 50).message.empty());
     const RunSummary capped = stuck.jumpTo(2000000000, std::size_t(4) << 20);  // 4 MB
     CHECK(capped.message.find("4 MB") != std::string::npos);

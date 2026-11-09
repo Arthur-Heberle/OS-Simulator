@@ -1,17 +1,15 @@
 // =============================================================================
 // MainWindow.h — Tela 1: janela principal do simulador (design.md §11).
 //
-// O quê: liga a interface ao núcleo. Abre o arquivo de configuração (de
-// qualquer lugar, A3.3.4), mostra o Gantt (GanttWidget), o estado do sistema,
-// a tabela de TCBs, o detalhe da tarefa com os botões de edição e o registro
-// de eventos; controla a simulação (avançar, retroceder, play/pausa, ir para
-// o instante N, executar até o fim, modo passo a passo ou completo) e, no
-// fim, exporta PNG + SVG e mostra o resumo (Tela 6).
+// Abre o arquivo de configuração [A3.3.4]; mostra o Gantt, o estado do
+// sistema, a tabela de TCBs, o detalhe da tarefa com os botões de edição e o
+// registro de eventos; controla a simulação (avançar, retroceder, play, ir para
+// um instante, executar até o fim, modo passo a passo ou completo); no fim,
+// exporta PNG + SVG e mostra o resumo (Tela 6).
 //
-// Por quê assim: a janela não tem regra de simulação; ela só chama o
-// Simulator (estado no histórico, D21) e mostra history[cursor]. Toda recusa
-// vem do núcleo com o motivo em português (A3.4, A5). Os botões só ficam
-// habilitados quando a ação faz sentido (A5).
+// A janela não contém regras de simulação: chama o Simulator e exibe
+// history[cursor] (D21). As recusas vêm do núcleo com o motivo [A3.4, A5], e
+// cada botão só fica habilitado quando a ação é possível [A5].
 //
 // Requisitos: RG1–RG4, A1.2, A1.5 (A1.5.1–A1.5.3), A2.3, A2.4, A3.1, A3.3.4,
 // A3.3.6, A3.4, A5. Decisões: D15, D16, D21, D26, D28, design.md §9–§11.
@@ -42,18 +40,17 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
-    // Lê um arquivo de qualquer caminho (QFile: pendrive, acentos, espaços;
-    // A3.3.4). Em erro de leitura, 'error' explica o motivo. Usado também pelo
-    // modo sem janela (--exportar) do main.cpp.
+    // Lê o arquivo de qualquer caminho, inclusive pendrive e nomes com acento
+    // [A3.3.4]; em falha, 'error' explica o motivo. Também usado pelo --exportar.
     static bool readConfigFile(const QString& path, std::string& text, QString* error);
 
-    // Teto de memória do histórico: metade da memória física livre agora (no
-    // Windows) ou DEFAULT_MAX_HISTORY_BYTES. A simulação não tem limite de tempo
-    // [A2.4]; o histórico precisa caber na memória [A1.5.2].
+    // Teto de memória do histórico: metade da memória física livre (Windows) ou
+    // DEFAULT_MAX_HISTORY_BYTES. A simulação não tem limite de tempo [A2.4], mas
+    // o histórico inteiro fica em memória [A1.5.2].
     static std::size_t historyMemoryBudget();
 
-    // Abre e carrega um arquivo de configuração: mostra a Tela 2 se houver
-    // erros ou avisos; com erro, nada é carregado (D18). true se carregou.
+    // Carrega um arquivo de configuração; mostra a Tela 2 se houver erros ou
+    // avisos. Com erro nada é carregado (D18). true se carregou.
     bool openConfigFile(const QString& path);
 
     // Ações da simulação (botões, menus e atalhos chamam estas funções).
@@ -99,10 +96,10 @@ private:
 
     Simulator sim_;
     bool loaded_ = false;
-    QString configPath_;            // arquivo aberto (para o título e a pasta padrão)
+    QString configPath_;            // arquivo aberto (título e pasta padrão das imagens)
     QString exportDir_;             // pasta das imagens (Tela 5); vazio = padrão
-    int timeline_ = 0;              // muda a cada carga/edição: a exportação é por linha do tempo
-    int exportedTimeline_ = -1;     // última linha do tempo já exportada (não repete)
+    int timeline_ = 0;              // muda a cada carga e edição; cada linha do tempo é exportada uma vez
+    int exportedTimeline_ = -1;     // última linha do tempo exportada
     bool completeMode_ = false;     // A1.5: false = passo a passo, true = completo
 
     GanttWidget* gantt_ = nullptr;

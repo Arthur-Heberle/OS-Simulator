@@ -1,7 +1,7 @@
 // =============================================================================
-// MainWindow.cpp — Implementação da Tela 1 (janela principal). Ver o cabeçalho
-// de MainWindow.h. Comentários "[TELA 1 / Ex] origem: ..." numeram cada
-// elemento visual e dizem de onde vem a informação (base do PDF de telas).
+// MainWindow.cpp — Tela 1 (janela principal). Contrato em MainWindow.h.
+// Os comentários "[TELA x / Ey] origem: ..." numeram cada elemento visual e
+// indicam de onde vem a informação exibida (base do PDF das telas).
 // =============================================================================
 
 #include "MainWindow.h"
@@ -63,8 +63,8 @@ QString stateName(TaskState state) {
     return QString();
 }
 
-// Motivo de uma falha de QFile em português. errorString() vem no idioma do
-// sistema operacional, e as mensagens ao usuário devem ser em português (A5).
+// Motivo de uma falha de QFile em português; errorString() vem no idioma do
+// sistema operacional [A5].
 QString fileErrorText(const QFile& file, bool writing) {
     if (QFileInfo(file.fileName()).isDir()) return QStringLiteral("o caminho é uma pasta, não um arquivo");
     switch (file.error()) {
@@ -94,15 +94,14 @@ QString idList(const SystemSnapshot& s, std::vector<int> indices) {
 // -----------------------------------------------------------------------------
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
-    timer_ = new QTimer(this);  // play: um passo a cada 'velocidade' ms (filho da janela: para junto com ela)
+    timer_ = new QTimer(this);  // play: um passo a cada 'velocidade' ms
     connect(timer_, &QTimer::timeout, this, [this]() { stepForward(); });
     buildUi();
     refreshAll();
     resize(1400, 860);
 }
 
-// Cria os widgets da janela (ações, barra, Gantt, docks, tabela, registro) e liga os
-// sinais. Aqui não há regra da simulação: tudo vem do Simulator.
+// Cria ações, barras, Gantt, painéis e registro, e liga os sinais.
 void MainWindow::buildUi() {
     setWindowTitle(QStringLiteral("Simulador de SO multitarefa — RM / EDF"));
 
@@ -123,7 +122,7 @@ void MainWindow::buildUi() {
     exportAct_ = action(QStringLiteral("Exportar imagem (PNG + SVG)…"), QKeySequence(QStringLiteral("Ctrl+E")), [this]() { exportDialog(); });
     auto* quitAct = action(QStringLiteral("Sair"), QKeySequence::Quit, [this]() { close(); });
     resetAct_ = action(QStringLiteral("Reiniciar"), QKeySequence(QStringLiteral("Ctrl+R")), [this]() { resetSimulation(); });
-    // Só texto nos botões: símbolos como ◀ ▶ dependem da fonte instalada.
+    // Botões só com texto: símbolos como setas dependem da fonte instalada.
     backAct_ = action(QStringLiteral("Retroceder"), QKeySequence(QStringLiteral("Ctrl+Left")), [this]() { stepBack(); });
     forwardAct_ = action(QStringLiteral("Avançar"), QKeySequence(QStringLiteral("Ctrl+Right")), [this]() { stepForward(); });
     playAct_ = action(QStringLiteral("Play"), QKeySequence(QStringLiteral("F6")), [this]() { togglePlay(); });
@@ -164,7 +163,8 @@ void MainWindow::buildUi() {
     bar->addAction(forwardAct_);
     bar->addAction(playAct_);
     bar->addAction(endAct_);
-    // Segunda linha da barra: ajustes (não cabem numa linha em telas de ~1400 px).
+    // Segunda linha da barra, com os ajustes: tudo numa linha não cabe em telas
+    // de ~1400 px.
     addToolBarBreak();
     bar = addToolBar(QStringLiteral("Ajustes"));
     bar->setMovable(false);
@@ -191,6 +191,8 @@ void MainWindow::buildUi() {
     connect(mode_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int i) { setCompleteMode(i == 1); });
     bar->addWidget(mode_);
     bar->addSeparator();
+    // [TELA 1 / E1.2d] Zoom do Gantt e exportação das imagens (A2.4).
+    // origem: GanttOptions::tickWidth; histórico inteiro do Simulator.
     bar->addAction(zoomOutAct_);
     bar->addAction(zoomInAct_);
     bar->addAction(exportAct_);
@@ -245,7 +247,7 @@ void MainWindow::buildUi() {
     // [TELA 1 / E1.10] Registro de eventos, avisos e erros (dock inferior).
     log_ = new QPlainTextEdit;
     log_->setReadOnly(true);
-    log_->setMaximumBlockCount(5000);  // sem crescer para sempre em simulações longas
+    log_->setMaximumBlockCount(5000);  // limita a memória em simulações longas
     auto* logDock = new QDockWidget(QStringLiteral("Registro (ocorrências, edições, avisos e erros)"), this);
     logDock->setWidget(log_);
     logDock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
@@ -260,8 +262,8 @@ void MainWindow::buildUi() {
 // -----------------------------------------------------------------------------
 
 std::size_t MainWindow::historyMemoryBudget() {
-    // Metade da memória física livre: sobra a outra metade para o sistema, para a
-    // exportação da imagem e para o resto do programa.
+    // Metade da memória física livre: a outra metade fica para o sistema, a
+    // exportação da imagem e o resto do programa.
     constexpr std::size_t minimum = std::size_t(256) << 20;
 #ifdef _WIN32
     MEMORYSTATUSEX status;
@@ -279,13 +281,13 @@ bool MainWindow::readConfigFile(const QString& path, std::string& text, QString*
         if (error) *error = QStringLiteral("Não foi possível abrir \"%1\": %2.").arg(QDir::toNativeSeparators(path), fileErrorText(file, false));
         return false;
     }
-    const QByteArray bytes = file.readAll();  // bytes crus: o parser trata BOM e CRLF/CR (D18)
+    const QByteArray bytes = file.readAll();  // bytes sem conversão: o parser trata codificação, BOM e fins de linha (D18)
     text.assign(bytes.constData(), static_cast<std::size_t>(bytes.size()));
     return true;
 }
 
 void MainWindow::openDialog() {
-    // Qualquer arquivo, de qualquer pasta, partição ou pendrive (A3.3.4).
+    // Qualquer arquivo, de qualquer pasta, partição ou pendrive [A3.3.4].
     const QString start = configPath_.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)
                                                 : QFileInfo(configPath_).absolutePath();
     const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("Abrir arquivo de configuração"), start,
@@ -303,7 +305,7 @@ bool MainWindow::openConfigFile(const QString& path) {
     }
     const ParseResult result = parser::parseConfig(text);
 
-    // [TELA 2] Erros (nada é carregado) ou avisos (carrega e informa): D18.
+    // [TELA 2] Erros (nada é carregado) ou avisos (carrega e informa) (D18).
     if (!result.ok() || !result.warnings.empty()) {
         auto* dialog = new dialogs::LoadResultDialog(QDir::toNativeSeparators(path), result, this);
         dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -328,16 +330,15 @@ bool MainWindow::openConfigFile(const QString& path) {
         runToEnd();  // A1.5.3: no modo completo, só o resultado final
     } else {
         refreshAll();
-        checkEnd();  // arquivo só com aperiódicas: a simulação já termina no instante 0
+        checkEnd();  // só aperiódicas: a simulação termina no instante 0
     }
     return true;
 }
 
-// Arquivo > Salvar configuração: grava a configuração ATUAL (com as edições feitas)
-// no formato do enunciado, para poder reabri-la depois [A3.3].
+// Arquivo > Salvar configuração: grava a configuração atual, com as edições, no
+// formato do arquivo, para ser reaberta depois [A3.3].
 void MainWindow::saveConfigDialog() {
     if (!loaded_) return;
-    // A configuração ATUAL (com as edições) no formato do arquivo (A3.3).
     const SystemSnapshot& s = sim_.current();
     Config config;
     config.algorithm = s.algorithm;
@@ -367,8 +368,8 @@ void MainWindow::saveConfigDialog() {
 
 void MainWindow::stepForward() {
     if (!loaded_) return;
-    // Um instante novo aumenta o histórico; o "play" com tarefa suspensa não tem
-    // fim, então o mesmo teto de memória do "executar até o fim" vale aqui.
+    // Cada instante novo aumenta o histórico, e o play com tarefa suspensa não
+    // termina sozinho: vale o mesmo teto de memória de runToEnd.
     const bool atEnd = sim_.cursor() + 1 == sim_.history().size();
     if (atEnd && !sim_.isFinished() &&
         (sim_.history().size() + 1) * estimateSnapshotBytes(sim_.current()) > historyMemoryBudget()) {
@@ -395,8 +396,8 @@ void MainWindow::stepBack() {
     refreshAll();
 }
 
-// Execução completa [A1.5.3]: calcula até o fim (ou até um limite, com a mensagem do
-// motivo) e mostra o resultado.
+// Execução completa [A1.5.3]: calcula até o fim, ou até o teto de memória com a
+// mensagem do motivo, e mostra o resultado.
 void MainWindow::runToEnd() {
     if (!loaded_) return;
     stopPlay();
@@ -412,8 +413,8 @@ void MainWindow::runToEnd() {
     checkEnd();
 }
 
-// Vai para o instante pedido (para trás ou para a frente). Se não der para chegar
-// (fim da simulação ou memória), fica no último instante possível e explica [A1.5.2, A5].
+// Vai para o instante pedido [A1.5.2]. Se não for possível (fim da simulação ou
+// memória), fica no último instante alcançado e explica o motivo [A5].
 void MainWindow::jumpToTick(Tick tick) {
     if (!loaded_) return;
     stopPlay();
@@ -438,8 +439,8 @@ void MainWindow::resetSimulation() {
     refreshAll();
 }
 
-// Play/Pausa: um QTimer avança um passo a cada "velocidade" ms. O tempo simulado não
-// depende do tempo real [A1.1]; o timer só controla o ritmo da animação.
+// Play/Pausa: um QTimer avança um passo a cada "velocidade" ms. O timer só dá o
+// ritmo da animação; o tempo simulado não depende do tempo real [A1.1].
 void MainWindow::togglePlay() {
     if (timer_->isActive()) {
         stopPlay();
@@ -452,7 +453,7 @@ void MainWindow::togglePlay() {
     refreshActions();
 }
 
-// Para o play (se estiver rodando) e volta o texto do botão para "Play".
+// Para o play e volta o texto do botão para "Play".
 void MainWindow::stopPlay() {
     if (timer_ != nullptr && timer_->isActive()) timer_->stop();
     if (playAct_ != nullptr) playAct_->setText(QStringLiteral("Play"));
@@ -462,7 +463,7 @@ void MainWindow::stopPlay() {
 // Alterna entre passo a passo e completo [A1.5]; ao escolher completo, executa até o fim.
 void MainWindow::setCompleteMode(bool complete) {
     completeMode_ = complete;
-    // Sincroniza a combo sem disparar o sinal de novo (senão runToEnd rodaria duas vezes).
+    // Atualiza a combo sem disparar o sinal, que chamaria runToEnd de novo.
     if (mode_->currentIndex() != (complete ? 1 : 0)) {
         const QSignalBlocker block(mode_);
         mode_->setCurrentIndex(complete ? 1 : 0);
@@ -495,15 +496,15 @@ bool MainWindow::applyEdits(const std::vector<Edit>& edits, const QString& what)
         ++applied;
         if (!result.message.empty()) log(QStringLiteral("Aviso: ") + qs(result.message));
     }
-    ++timeline_;  // o futuro foi descartado (D15): a próxima chegada ao fim exporta de novo
+    ++timeline_;  // nova linha do tempo (D15): o próximo fim exporta de novo
     log(QStringLiteral("Edição aplicada no instante %1: %2 (o futuro foi recalculado).").arg(sim_.current().tick).arg(what));
     refreshAll();
-    checkEnd();  // forçar o término ou remover a última tarefa encerra a simulação [A2.4]
+    checkEnd();  // a edição pode ter encerrado a simulação [A2.4]
     return true;
 }
 
-// Botões da tarefa selecionada (Suspender, Retomar, Ativar agora, Forçar término,
-// Remover): monta a edição e a aplica por applyEdits, que mostra a recusa se houver [A3.4].
+// Botões Suspender, Retomar, Ativar agora, Forçar término e Remover da tarefa
+// selecionada [A3.4].
 void MainWindow::taskAction(EditKind kind) {
     const int index = selectedTask();
     if (index < 0) return;
@@ -523,8 +524,8 @@ void MainWindow::taskAction(EditKind kind) {
     applyEdits({edit}, what);
 }
 
-// Tela 3: edita os parâmetros da tarefa selecionada. Tarefa ignorada no Projeto A não
-// pode ser editada (explica o motivo ao usuário).
+// Tela 3: edita os parâmetros da tarefa selecionada. Tarefa ignorada no Projeto A
+// não é editável, e o motivo é informado.
 void MainWindow::editTaskDialog() {
     const int index = selectedTask();
     if (index < 0 || !loaded_) return;
@@ -584,8 +585,8 @@ QString MainWindow::exportFolder() const {
     return QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
 }
 
-// Arquivo > Exportar imagens: o usuário escolhe a pasta e o Gantt da simulação inteira
-// é gravado em PNG e SVG [A2.4].
+// Arquivo > Exportar imagem: grava o Gantt de todo o histórico calculado em PNG e
+// SVG, na pasta escolhida [A2.4].
 void MainWindow::exportDialog() {
     if (!loaded_) return;
     stopPlay();
@@ -607,15 +608,15 @@ void MainWindow::exportDialog() {
     showMessage(false, QStringLiteral("Imagens exportadas"), files.join(QStringLiteral("\n")));
 }
 
-// Ao chegar ao fim da simulação: exporta PNG + SVG (uma vez por linha do tempo, para
-// não repetir a cada clique) e mostra a Tela 6 [A2.4].
+// No fim da simulação, exporta PNG + SVG e mostra a Tela 6 [A2.4]. Cada linha do
+// tempo é exportada uma vez, não a cada clique no último instante.
 void MainWindow::checkEnd() {
     if (!loaded_ || !sim_.isFinished() || sim_.cursor() + 1 != sim_.history().size()) return;
     if (exportedTimeline_ == timeline_) return;  // esta linha do tempo já foi exportada
     exportedTimeline_ = timeline_;
     stopPlay();
 
-    // Exportação automática da simulação INTEIRA (A2.4), sem capturar a tela.
+    // Exportação automática da simulação inteira, sem captura de tela [A2.4].
     statusBar()->showMessage(QStringLiteral("Exportando as imagens do gráfico de Gantt…"));
     QApplication::setOverrideCursor(Qt::WaitCursor);
     const QString base = QDir(exportFolder()).filePath(GanttRenderer::defaultBaseName(QFileInfo(configPath_).completeBaseName()));
@@ -675,8 +676,8 @@ void MainWindow::refreshAll() {
     refreshActions();
 }
 
-// [E1.6] Painel "Estado do sistema" do instante atual: relógio, CPUs (inclusive os
-// períodos em que ficaram desligadas, A1.2), filas e utilização [A1.5.1].
+// [E1.6] Painel "Estado do sistema" do instante atual: relógio, CPUs e períodos
+// desligadas [A1.2], filas e utilização [A1.5.1].
 void MainWindow::refreshState() {
     if (!loaded_) {
         state_->setHtml(QStringLiteral("<p>Abra um arquivo de configuração (<b>Arquivo &gt; Abrir configuração</b>).</p>"));
@@ -764,8 +765,8 @@ void MainWindow::refreshState() {
     state_->setHtml(html);
 }
 
-// [E1.7] Tabela de TCBs: uma linha por tarefa com todas as informações dela [A1.3],
-// em ordem natural de ID.
+// [E1.7] Tabela de TCBs: uma linha por tarefa, com todos os campos [A1.3], em
+// ordem natural de id.
 void MainWindow::refreshTable() {
     const int keep = selectedTask();
     // [TELA 1 / E1.7] Uma linha por TCB (A1.3), todas as colunas. origem: SystemSnapshot::tasks de history[cursor].
@@ -793,10 +794,10 @@ void MainWindow::refreshTable() {
     for (int i = 0; i < static_cast<int>(order.size()); ++i) order[i] = i;
     std::sort(order.begin(), order.end(), [&s](int a, int b) { return naturalIdLess(s.tasks[a].id, s.tasks[b].id); });
 
-    // As células são reaproveitadas de um passo para o outro e só o texto muda.
-    // Recriar a tabela e medir todas as colunas a cada passo custava ~17 ms com
-    // 100 tarefas; as colunas só são remedidas quando a lista de tarefas muda ou
-    // um texto fica mais longo que o maior já exibido na coluna.
+    // As células são reaproveitadas entre passos e só o texto muda. As colunas
+    // só são remedidas quando a lista de tarefas muda ou um texto passa do maior
+    // já exibido: recriar e remedir tudo a cada passo custava ~17 ms com 100
+    // tarefas.
     const bool rebuild = order != tableTasks_ || table_->rowCount() != static_cast<int>(order.size());
     if (rebuild) {
         table_->setRowCount(0);
@@ -864,8 +865,7 @@ void MainWindow::refreshDetail() {
     detail_->setText(html);
 }
 
-// Habilita só os botões e ações que fazem sentido agora [A5]: sem arquivo carregado,
-// no fim da simulação, sem tarefa selecionada, etc.
+// Habilita só as ações possíveis no estado atual [A5].
 void MainWindow::refreshActions() {
     const bool playing = timer_ != nullptr && timer_->isActive();
     const bool atEnd = loaded_ && sim_.cursor() + 1 == sim_.history().size();
@@ -906,12 +906,12 @@ int MainWindow::selectedTask() const {
     return row >= 0 && row < static_cast<int>(tableTasks_.size()) ? tableTasks_[row] : -1;
 }
 
-// Escreve no registro o que aconteceu no instante (as ocorrências, sem os despachos) [A2.2].
+// Escreve no registro as ocorrências do instante, exceto os despachos [A2.2].
 void MainWindow::logInstant(const SystemSnapshot& s) {
     // [TELA 1 / E1.10] origem: SystemSnapshot::occurrences do instante (A2.2: o que aconteceu em x = tick).
     QStringList parts;
     for (const Occurrence& o : s.occurrences) {
-        if (o.type == OccurrenceType::Dispatch) continue;  // despacho: visível no Gantt e na tabela
+        if (o.type == OccurrenceType::Dispatch) continue;  // o despacho já aparece no Gantt e na tabela
         QString text = GanttRenderer::occurrenceText(o.type);
         if (o.taskIndex >= 0 && o.taskIndex < static_cast<int>(s.tasks.size())) text = qs(s.tasks[o.taskIndex].id) + QStringLiteral(": ") + text;
         else if (o.cpuIndex >= 0) text = QStringLiteral("CPU%1: ").arg(o.cpuIndex + 1) + text;
@@ -921,21 +921,20 @@ void MainWindow::logInstant(const SystemSnapshot& s) {
     log(QStringLiteral("t=%1  %2").arg(s.tick).arg(parts.isEmpty() ? QStringLiteral("sem eventos") : parts.join(QStringLiteral(" · "))));
 }
 
-// Acrescenta uma linha ao registro (dock de baixo).
+// Acrescenta uma linha ao registro.
 void MainWindow::log(const QString& line) {
     if (log_) log_->appendPlainText(line);
 }
 
-// Mostra um erro ou informação, com o motivo, sem bloquear a janela [A5].
+// Mostra um erro ou uma informação sem bloquear a janela [A5].
 void MainWindow::showMessage(bool isError, const QString& title, const QString& text) {
-    // Não bloqueia: a janela continua respondendo (A5).
     auto* box = new QMessageBox(isError ? QMessageBox::Warning : QMessageBox::Information, title, text, QMessageBox::Ok, this);
     box->setAttribute(Qt::WA_DeleteOnClose);
     box->open();
 }
 
-// Ao fechar a janela, para o play: o timer não pode disparar com a janela destruída.
+// Ao fechar a janela, para o play, para o timer não disparar sobre a janela destruída.
 void MainWindow::closeEvent(QCloseEvent* event) {
-    stopPlay();  // fechar durante o play não deixa o timer disparando
+    stopPlay();
     event->accept();
 }
