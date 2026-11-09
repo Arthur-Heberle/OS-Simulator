@@ -61,13 +61,13 @@
 
 ### RG5 — Execução sem instalação
 - [x] A linguagem foi escolhida (C++17 / Qt 6).
-- [ ] Executa sem instalar biblioteca extra, software, runtime ou equivalente. *(falta provar numa máquina sem Qt; com PATH mínimo já funciona)*
-- [ ] Testado num computador limpo, sem nada instalado. *(pendente: VM ou outro PC sem Qt)*
+- [x] Executa sem instalar biblioteca extra, software, runtime ou equivalente. *(pasta `dist/` com PATH mínimo; dado como concluído pela dupla em 09/11/2026)*
+- [x] Testado num computador limpo, sem nada instalado. *(dado como concluído pela dupla em 09/11/2026)*
 
 ### RG6 — Comentários
 - [x] Todo o código-fonte está comentado. *(varredura de funções sem comentário, 30/10)*
 - [x] Os comentários explicam o que cada parte/função/componente faz. *(idem)*
-- [ ] Os comentários explicam as razões/justificativas de todas as decisões de implementação. *(pendente: leitura da dupla; as decisões estão citadas como D1–D30 e Q-xx)*
+- [x] Os comentários explicam as razões/justificativas de todas as decisões de implementação. *(comentários revisados em 09/11/2026; as decisões estão citadas como D1–D30 e Q-xx)*
 
 ---
 
@@ -190,7 +190,7 @@
 
 **A3.3.4 — Local do arquivo**
 - [x] Carrega arquivo com **qualquer nome**.
-- [ ] Carrega de **qualquer local**: qualquer diretório, outra partição ou disco externo (pendrive). *(pasta com espaço e acento e outra partição (D:) verificados; falta o pendrive, teste físico)*
+- [x] Carrega de **qualquer local**: qualquer diretório, outra partição ou disco externo (pendrive). *(pasta com espaço e acento e outra partição (D:) verificados; pendrive dado como concluído pela dupla em 09/11/2026)*
 - [x] **Não** usa arquivo fixo.
 
 **A3.3.5 — Eventos (preparação para o B)**
@@ -236,7 +236,7 @@
 - [x] Cada tarefa periódica termina após executar 10 vezes.
 
 ### A5 — Interface
-- [ ] A interface é intuitiva e fácil de entender e usar. *(subjetivo: avaliar na defesa)*
+- [x] A interface é intuitiva e fácil de entender e usar. *(avaliada pela dupla em 09/11/2026)*
 - [x] Qualquer erro durante o uso é apresentado claramente, com o motivo. *("Ir para o instante" e "avançar" respeitam o teto de memória com mensagem: Fase 7)*
 
 ---
@@ -247,9 +247,9 @@
 - [x] Qual o papel do `quantum` no RM e no EDF? **RESPONDIDO (Q4):** tem que ser lido do arquivo; usar ou não é específico de cada escalonador (RM/EDF ignoram).
 - [x] No desempate (A4.3), o "prazo" é o relativo ou o absoluto? **RESPONDIDO (Q11):** prazo absoluto da ocorrência atual (D14).
 - [x] IDs `BSxx/PSxx/DSxx/SSxx` no A? **RESPONDIDO (Q12):** com período > 0 são periódicas comuns; não estarão nos testes da defesa A (D7).
-- [ ] A pasta `dist/` (Q9) continua valendo depois da Q13 ("tudo tem que estar empacotado")? *(aberta Q-A11; padrão: pasta `dist/`, D26)*
-- [ ] Qual a ordem dos eventos dentro de um tick? *(aberta Q-A10; padrão em design.md §6)*
-- [ ] O `id` é sempre numérico (afeta a ordem do eixo Y)? *(aberta Q-A6; padrão: string, ordem natural, D4)*
-- [ ] Cores repetidas no arquivo geram erro ou aviso? *(aberta Q-A7; padrão: aviso, D17)*
-- [ ] "Executar 10 vezes" significa 10 ativações concluídas? *(aberta Q-A8; padrão: D6)*
-- [ ] Qual o escopo dos eventos do A3.1 (mutex, E/S) no Projeto A? *(aberta Q-A9; padrão: guardar texto cru, sem simular)*
+- [x] A pasta `dist/` (Q9) continua valendo depois da Q13 ("tudo tem que estar empacotado")? *(encerrada pela dupla em 09/11/2026 com o padrão adotado, sem resposta do professor; Q-A11; padrão: pasta `dist/`, D26)*
+- [x] Qual a ordem dos eventos dentro de um tick? *(encerrada pela dupla em 09/11/2026 com o padrão adotado, sem resposta do professor; Q-A10; padrão em design.md §6)*
+- [x] O `id` é sempre numérico (afeta a ordem do eixo Y)? *(encerrada pela dupla em 09/11/2026 com o padrão adotado, sem resposta do professor; Q-A6; padrão: string, ordem natural, D4)*
+- [x] Cores repetidas no arquivo geram erro ou aviso? *(encerrada pela dupla em 09/11/2026 com o padrão adotado, sem resposta do professor; Q-A7; padrão: aviso, D17)*
+- [x] "Executar 10 vezes" significa 10 ativações concluídas? *(encerrada pela dupla em 09/11/2026 com o padrão adotado, sem resposta do professor; Q-A8; padrão: D6)*
+- [x] Qual o escopo dos eventos do A3.1 (mutex, E/S) no Projeto A? *(encerrada pela dupla em 09/11/2026 com o padrão adotado, sem resposta do professor; Q-A9; padrão: guardar texto cru, sem simular)*
