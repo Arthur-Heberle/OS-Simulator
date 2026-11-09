@@ -56,6 +56,22 @@ QString stateName(TaskState state) {
     return QString();
 }
 
+// Motivo de uma falha de QFile em português. errorString() vem no idioma do
+// sistema operacional, e as mensagens ao usuário devem ser em português (A5).
+QString fileErrorText(const QFile& file, bool writing) {
+    if (QFileInfo(file.fileName()).isDir()) return QStringLiteral("o caminho é uma pasta, não um arquivo");
+    switch (file.error()) {
+        case QFileDevice::OpenError:
+            if (writing) return QStringLiteral("pasta inexistente ou sem permissão de escrita");
+            return file.exists() ? QStringLiteral("sem permissão de leitura ou arquivo em uso por outro programa")
+                                 : QStringLiteral("o arquivo não existe");
+        case QFileDevice::ReadError:        return QStringLiteral("falha de leitura (o disco ou pendrive foi removido?)");
+        case QFileDevice::WriteError:       return QStringLiteral("falha de escrita (disco cheio ou protegido)");
+        case QFileDevice::PermissionsError: return QStringLiteral("sem permissão de acesso");
+        default:                            return QStringLiteral("falha do sistema de arquivos");
+    }
+}
+
 // Lista de IDs de tarefas, em ordem natural (D4).
 QString idList(const SystemSnapshot& s, std::vector<int> indices) {
     if (indices.empty()) return QStringLiteral("—");
@@ -239,7 +255,7 @@ void MainWindow::buildUi() {
 bool MainWindow::readConfigFile(const QString& path, std::string& text, QString* error) {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        if (error) *error = QStringLiteral("Não foi possível abrir \"%1\": %2.").arg(QDir::toNativeSeparators(path), file.errorString());
+        if (error) *error = QStringLiteral("Não foi possível abrir \"%1\": %2.").arg(QDir::toNativeSeparators(path), fileErrorText(file, false));
         return false;
     }
     const QByteArray bytes = file.readAll();  // bytes crus: o parser trata BOM e CRLF/CR (D18)
@@ -317,7 +333,7 @@ void MainWindow::saveConfigDialog() {
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
         file.write(text.data(), static_cast<qint64>(text.size())) != static_cast<qint64>(text.size())) {
         showMessage(true, QStringLiteral("Erro ao salvar"),
-                    QStringLiteral("Não foi possível gravar \"%1\": %2.").arg(QDir::toNativeSeparators(path), file.errorString()));
+                    QStringLiteral("Não foi possível gravar \"%1\": %2.").arg(QDir::toNativeSeparators(path), fileErrorText(file, true)));
         return;
     }
     log(QStringLiteral("Configuração salva em \"%1\" (a semente do sorteio não faz parte do formato).").arg(QDir::toNativeSeparators(path)));
@@ -719,50 +735,75 @@ void MainWindow::refreshState() {
 void MainWindow::refreshTable() {
     const int keep = selectedTask();
     // [TELA 1 / E1.7] Uma linha por TCB (A1.3), todas as colunas. origem: SystemSnapshot::tasks de history[cursor].
-    const QStringList headers = {QStringLiteral("ID"), QStringLiteral("Estado"), QStringLiteral("CPU"), QStringLiteral("Cor"),
-                                 QStringLiteral("Ingresso"), QStringLiteral("Duração"), QStringLiteral("Período"),
-                                 QStringLiteral("Prazo"), QStringLiteral("Restante"), QStringLiteral("Prazo absoluto"),
-                                 QStringLiteral("Ativações (lib./concl.)"), QStringLiteral("Próx. ativação"),
-                                 QStringLiteral("Perdas de prazo"), QStringLiteral("Preempções"), QStringLiteral("Migrações"),
-                                 QStringLiteral("Executou"), QStringLiteral("Esperou"), QStringLiteral("1º início"),
-                                 QStringLiteral("Término"), QStringLiteral("Eventos"), QStringLiteral("Observação")};
-    table_->blockSignals(true);
-    table_->clear();
-    table_->setColumnCount(headers.size());
-    table_->setHorizontalHeaderLabels(headers);
-    tableTasks_.clear();
-    if (loaded_) {
-        const SystemSnapshot& s = sim_.current();
-        for (int i = 0; i < static_cast<int>(s.tasks.size()); ++i) tableTasks_.push_back(i);
-        std::sort(tableTasks_.begin(), tableTasks_.end(),
-                  [&s](int a, int b) { return naturalIdLess(s.tasks[a].id, s.tasks[b].id); });
-        table_->setRowCount(static_cast<int>(tableTasks_.size()));
-        for (int r = 0; r < static_cast<int>(tableTasks_.size()); ++r) {
-            const Task& t = s.tasks[tableTasks_[r]];
-            const Job* job = currentJob(t);
-            auto dash = [](Tick v) { return v < 0 ? QStringLiteral("—") : QString::number(v); };
-            const QStringList cells = {
-                qs(t.id), t.ignored ? QStringLiteral("Ignorada") : stateName(t.state), t.cpu >= 0 ? QStringLiteral("CPU%1").arg(t.cpu + 1) : QStringLiteral("—"),
-                qs(t.color), QString::number(t.arrival), QString::number(t.duration), QString::number(t.period),
-                QString::number(t.deadline), job ? QString::number(job->remaining) : QStringLiteral("—"),
-                job ? QString::number(job->absDeadline) + (job->missed ? QStringLiteral(" (perdido)") : QString()) : QStringLiteral("—"),
-                QStringLiteral("%1 / %2").arg(t.released).arg(t.completed),
-                t.released < PERIODIC_ACTIVATION_LIMIT && t.state != TaskState::Terminated ? QString::number(t.nextRelease) : QStringLiteral("—"),
-                QString::number(t.deadlineMisses), QString::number(t.preemptions), QString::number(t.migrations),
-                QString::number(t.runTicks), QString::number(t.waitTicks), dash(t.firstStart), dash(t.finishTime),
-                qs(t.rawEvents), t.ignored ? qs(t.ignoredReason) : qs(t.blockReason)};
-            for (int c = 0; c < cells.size(); ++c) {
-                auto* item = new QTableWidgetItem(cells[c]);
-                if (t.ignored) item->setForeground(Qt::gray);  // fora do Projeto A (D7)
+    static const QStringList headers = {
+        QStringLiteral("ID"), QStringLiteral("Estado"), QStringLiteral("CPU"), QStringLiteral("Cor"),
+        QStringLiteral("Ingresso"), QStringLiteral("Duração"), QStringLiteral("Período"),
+        QStringLiteral("Prazo"), QStringLiteral("Restante"), QStringLiteral("Prazo absoluto"),
+        QStringLiteral("Ativações (lib./concl.)"), QStringLiteral("Próx. ativação"),
+        QStringLiteral("Perdas de prazo"), QStringLiteral("Preempções"), QStringLiteral("Migrações"),
+        QStringLiteral("Executou"), QStringLiteral("Esperou"), QStringLiteral("1º início"),
+        QStringLiteral("Término"), QStringLiteral("Eventos"), QStringLiteral("Observação")};
+    const QSignalBlocker block(table_);
+    if (table_->columnCount() != headers.size()) {
+        table_->setColumnCount(headers.size());
+        table_->setHorizontalHeaderLabels(headers);
+    }
+    if (!loaded_) {
+        table_->setRowCount(0);
+        tableTasks_.clear();
+        return;
+    }
+
+    const SystemSnapshot& s = sim_.current();
+    std::vector<int> order(s.tasks.size());
+    for (int i = 0; i < static_cast<int>(order.size()); ++i) order[i] = i;
+    std::sort(order.begin(), order.end(), [&s](int a, int b) { return naturalIdLess(s.tasks[a].id, s.tasks[b].id); });
+
+    // As células são reaproveitadas de um passo para o outro e só o texto muda.
+    // Recriar a tabela e medir todas as colunas a cada passo custava ~17 ms com
+    // 100 tarefas; as colunas só são remedidas quando a lista de tarefas muda ou
+    // um texto fica mais longo que o maior já exibido na coluna.
+    const bool rebuild = order != tableTasks_ || table_->rowCount() != static_cast<int>(order.size());
+    if (rebuild) {
+        table_->setRowCount(0);
+        table_->setRowCount(static_cast<int>(order.size()));
+        tableTasks_ = order;
+        columnChars_.assign(headers.size(), 0);
+    }
+    bool resize = rebuild;
+    for (int r = 0; r < static_cast<int>(tableTasks_.size()); ++r) {
+        const Task& t = s.tasks[tableTasks_[r]];
+        const Job* job = currentJob(t);
+        auto dash = [](Tick v) { return v < 0 ? QStringLiteral("—") : QString::number(v); };
+        const QStringList cells = {
+            qs(t.id), t.ignored ? QStringLiteral("Ignorada") : stateName(t.state), t.cpu >= 0 ? QStringLiteral("CPU%1").arg(t.cpu + 1) : QStringLiteral("—"),
+            qs(t.color), QString::number(t.arrival), QString::number(t.duration), QString::number(t.period),
+            QString::number(t.deadline), job ? QString::number(job->remaining) : QStringLiteral("—"),
+            job ? QString::number(job->absDeadline) + (job->missed ? QStringLiteral(" (perdido)") : QString()) : QStringLiteral("—"),
+            QStringLiteral("%1 / %2").arg(t.released).arg(t.completed),
+            t.released < PERIODIC_ACTIVATION_LIMIT && t.state != TaskState::Terminated ? QString::number(t.nextRelease) : QStringLiteral("—"),
+            QString::number(t.deadlineMisses), QString::number(t.preemptions), QString::number(t.migrations),
+            QString::number(t.runTicks), QString::number(t.waitTicks), dash(t.firstStart), dash(t.finishTime),
+            qs(t.rawEvents), t.ignored ? qs(t.ignoredReason) : qs(t.blockReason)};
+        for (int c = 0; c < cells.size(); ++c) {
+            QTableWidgetItem* item = table_->item(r, c);
+            if (item == nullptr) {
+                item = new QTableWidgetItem;  // a tabela assume a posse do item
                 table_->setItem(r, c, item);
             }
-            table_->item(r, 3)->setBackground(QColor(QStringLiteral("#") + qs(t.color)));
-            table_->item(r, 3)->setForeground(QColor(QStringLiteral("#") + qs(t.color)).lightness() < 128 ? Qt::white : Qt::black);
-            if (tableTasks_[r] == keep) table_->selectRow(r);
+            if (item->text() != cells[c]) item->setText(cells[c]);
+            if (cells[c].size() > columnChars_[c]) {
+                columnChars_[c] = static_cast<int>(cells[c].size());
+                resize = true;
+            }
+            if (t.ignored) item->setForeground(Qt::gray);  // fora do Projeto A (D7)
         }
-        table_->resizeColumnsToContents();
+        const QColor color(QStringLiteral("#") + qs(t.color));
+        table_->item(r, 3)->setBackground(color);
+        table_->item(r, 3)->setForeground(color.lightness() < 128 ? Qt::white : Qt::black);
+        if (rebuild && tableTasks_[r] == keep) table_->selectRow(r);
     }
-    table_->blockSignals(false);
+    if (resize) table_->resizeColumnsToContents();
 }
 
 // [E1.8] Detalhe da tarefa selecionada: estado, ocorrência atual e avisos.
